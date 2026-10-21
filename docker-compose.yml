@@ -1,13 +1,4 @@
 services:
-  mongodb:
-    image: mongo:7.0
-    container_name: lifemanager_db
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-    restart: always
-
   backend:
     build:
       context: ./backend
@@ -18,10 +9,8 @@ services:
       - ./backend:/app
       - /app/node_modules # Захищаємо Linux модулі від перезапису
     environment:
-      - MONGO_URI=mongodb://mongodb:27017/lifemanager
+      - MONGO_URI=mongodb+srv://untervaldthebest_db_user:Kos28Kos28.@cluster0.dq6tawx.mongodb.net/lifemanager?retryWrites=true&w=majority
       - JWT_SECRET=SuperSecretLifeManagerKey2026_!@#
-    depends_on:
-      - mongodb
     restart: always
 
   frontend:
@@ -39,6 +28,3 @@ services:
     depends_on:
       - backend
     restart: always
-
-volumes:
-  mongodb_data:
