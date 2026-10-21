@@ -7,6 +7,7 @@ import { WorkoutsModule } from './workouts/workouts.module.js';
 import { FinanceModule } from './finance/finance.module.js';
 import { TasksModule } from './tasks/tasks.module.js';
 import { HealthModule } from './health/health.module.js';
+import {EquipmentModule} from "./home-tech/equipment.module.js";
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { HealthModule } from './health/health.module.js';
     FinanceModule,
     TasksModule,
     HealthModule,
+    EquipmentModule,
   ],
   controllers: [], // Поки порожньо, сюди нічого не пишемо
   providers: [],   // Поки порожньо

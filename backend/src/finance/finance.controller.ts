@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, UseGuards, Request } from '@nestjs/common';
+import {Controller, Get, Post, Body, Param, Delete, UseGuards, Request, Patch} from '@nestjs/common';
 import { FinanceService } from './finance.service.js';
 import { CreateTransactionDto } from './dto/create-transaction.dto.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -26,5 +26,14 @@ export class FinanceController {
     @Delete(':id')
     remove(@Request() req: any, @Param('id') id: string) {
         return this.financeService.remove(id, req.user.id);
+    }
+
+    @Patch(':id')
+    update(
+        @Request() req: any,
+        @Param('id') id: string,
+        @Body() body: any
+    ) {
+        return this.financeService.updateTransaction(req.user.id, id, body);
     }
 }

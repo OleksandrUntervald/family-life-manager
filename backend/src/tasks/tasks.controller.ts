@@ -27,4 +27,13 @@ export class TasksController {
     remove(@Request() req: any, @Param('id') id: string) {
         return this.tasksService.remove(id, req.user.id);
     }
+
+    @Patch(':id/edit')
+    updateTask(
+        @Request() req: any,
+        @Param('id') id: string,
+        @Body() body: { title: string; date: string }
+    ) {
+        return this.tasksService.updateTask(req.user.id, id, body.title, body.date);
+    }
 }

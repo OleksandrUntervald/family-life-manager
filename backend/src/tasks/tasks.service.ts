@@ -42,4 +42,12 @@ export class TasksService {
             throw new NotFoundException('Завдання не знайдено або немає доступу');
         }
     }
+
+    async updateTask(userId: string, id: string, title: string, date: string) {
+        return this.taskModel.findOneAndUpdate(
+            { _id: id, userId },
+            { title, date },
+            { new: true }
+        ).exec();
+    }
 }

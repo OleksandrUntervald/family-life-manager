@@ -32,4 +32,12 @@ export class WorkoutsService {
             throw new NotFoundException('Тренування не знайдено або у вас немає доступу');
         }
     }
+
+    async updateWorkout(userId: string, id: string, updateData: any) {
+        return this.workoutModel.findOneAndUpdate(
+            { _id: id, userId },
+            { $set: updateData },
+            { new: true }
+        ).exec();
+    }
 }

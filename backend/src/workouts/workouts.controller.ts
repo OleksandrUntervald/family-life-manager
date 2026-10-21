@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, UseGuards, Request } from '@nestjs/common';
+import {Controller, Get, Post, Body, Param, Delete, UseGuards, Request, Patch} from '@nestjs/common';
 import { WorkoutsService } from './workouts.service.js';
 import { CreateWorkoutDto } from './dto/create-workout.dto.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -22,5 +22,13 @@ export class WorkoutsController {
     @Delete(':id')
     remove(@Request() req: any, @Param('id') id: string) {
         return this.workoutsService.remove(id, req.user.id);
+    }
+    @Patch(':id')
+    updateWorkout(
+        @Request() req: any,
+        @Param('id') id: string,
+        @Body() body: any
+    ) {
+        return this.workoutsService.updateWorkout(req.user.id, id, body);
     }
 }

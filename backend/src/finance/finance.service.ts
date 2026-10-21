@@ -51,4 +51,13 @@ export class FinanceService {
             throw new NotFoundException('Транзакцію не знайдено або немає доступу');
         }
     }
+
+    async updateTransaction(userId: string, id: string, updateData: any) {
+        return this.transactionModel.findOneAndUpdate(
+            { _id: id, userId },
+            { $set: updateData },
+            { new: true }
+        ).exec();
+    }
+
 }
