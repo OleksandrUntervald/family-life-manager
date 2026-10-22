@@ -7,7 +7,8 @@ import { WorkoutsModule } from './workouts/workouts.module.js';
 import { FinanceModule } from './finance/finance.module.js';
 import { TasksModule } from './tasks/tasks.module.js';
 import { HealthModule } from './health/health.module.js';
-import {EquipmentModule} from "./home-tech/equipment.module.js";
+import { EquipmentModule } from './home-tech/equipment.module.js';
+import { PremiumRequestsModule } from './premium-requests/premium-requests.module.js';
 
 @Module({
   imports: [
@@ -29,8 +30,9 @@ import {EquipmentModule} from "./home-tech/equipment.module.js";
     TasksModule,
     HealthModule,
     EquipmentModule,
+    PremiumRequestsModule, // <-- Підключили новий модуль
   ],
-  controllers: [], // Поки порожньо, сюди нічого не пишемо
-  providers: [],   // Поки порожньо
+  controllers: [],
+  providers: [],
 })
 export class AppModule {}

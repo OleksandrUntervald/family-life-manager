@@ -18,7 +18,14 @@ export default function LoginPage() {
         try {
             const response = await api.post('/api/auth/login', formData);
             Cookies.set('access_token', response.data.access_token, { expires: 7 });
-            router.push('/'); // Перенаправляємо на головну
+
+            const userRole = response.data.user?.role;
+            // За вимогами диплому: адмін та менеджер одразу потрапляють на сторінку заявок
+            if (userRole === 'admin' || userRole === 'super_admin' || userRole === 'manager') {
+                router.push('/admin');
+            } else {
+                router.push('/');
+            }
         } catch (err: any) {
             setError(err.response?.data?.message || 'Невірний email або пароль');
         }

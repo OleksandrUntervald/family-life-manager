@@ -3,7 +3,10 @@ import { Document, Types } from 'mongoose';
 
 export enum UserRole {
     USER = 'user',
-    SUPER_ADMIN = 'super_admin',
+    PREMIUM = 'premium',
+    MANAGER = 'manager',
+    ADMIN = 'admin',
+    SUPER_ADMIN = 'super_admin', // Залишаємо для зворотної сумісності
 }
 
 @Schema({ timestamps: true }) // Автоматично додасть createdAt та updatedAt

@@ -1,17 +1,41 @@
-import { ConflictException, Injectable, BadRequestException } from '@nestjs/common';
+import { ConflictException, Injectable, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import * as bcrypt from 'bcrypt';
-import { User } from './schemas/user.schema.js';
+import * as bcrypt from 'bcrypt'; // Виправили імпорт
+import { User, UserRole } from './schemas/user.schema.js';
 import { RegisterDto } from '../auth/dto/register.dto.js';
 
 @Injectable()
-export class UsersService {
+export class UsersService implements OnModuleInit {
     constructor(@InjectModel(User.name) private userModel: Model<User>) {}
+
+    // Автоматичне створення дефолтного суперадміна при старті сервера (вимога диплому)
+    async onModuleInit() {
+        const adminEmail = 'admin@gmail.com';
+        const existingAdmin = await this.findByEmail(adminEmail);
+
+        if (!existingAdmin) {
+            const salt = await bcrypt.genSalt(10);
+            // Змінили пароль на 'admin123', щоб він пройшов валідацію (> 6 символів)
+            const passwordHash = await bcrypt.hash('admin123', salt);
+            await this.userModel.create({
+                email: adminEmail,
+                name: 'Super Admin',
+                passwordHash,
+                role: UserRole.ADMIN,
+            });
+            console.log('✅ Дефолтного суперадміна (admin@gmail.com / admin123) успішно створено!');
+        }
+    }
 
     // Пошук користувача за email
     async findByEmail(email: string): Promise<User | null> {
         return this.userModel.findOne({ email }).exec();
+    }
+
+    // Пошук користувача за ID (потрібно для перевірки актуальної ролі)
+    async findById(id: string): Promise<User | null> {
+        return this.userModel.findById(id).select('-passwordHash').exec();
     }
 
     // Створення нового користувача
@@ -67,5 +91,31 @@ export class UsersService {
         await user.save();
 
         return { message: 'Пароль успішно змінено' };
+    }
+
+    // --- АДМІНСЬКІ МЕТОДИ (GOD MODE) ---
+
+    // Отримати всіх користувачів системи
+    async findAllUsers() {
+        return this.userModel.find().select('-passwordHash').sort({ createdAt: -1 }).exec();
+    }
+
+    // Змінити роль користувача (наприклад, видати PREMIUM або зробити MANAGER)
+    async updateUserRole(targetUserId: string, role: UserRole) {
+        return this.userModel.findByIdAndUpdate(
+            targetUserId,
+            { role },
+            { new: true }
+        ).select('-passwordHash').exec();
+    }
+
+    // Заблокувати / Розблокувати користувача
+    async toggleBanUser(targetUserId: string) {
+        const user = await this.userModel.findById(targetUserId);
+        if (!user) throw new BadRequestException('Користувача не знайдено');
+
+        user.isBanned = !user.isBanned;
+        await user.save();
+        return { id: user._id, isBanned: user.isBanned };
     }
 }

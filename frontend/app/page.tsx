@@ -8,7 +8,8 @@ import { api } from '@/config/api';
 import CurrencyWidget from '@/components/CurrencyWidget';
 
 interface UserProfile {
-  id: string;
+  _id?: string;
+  id?: string;
   name: string;
   email: string;
   role: string;
@@ -19,10 +20,19 @@ export default function HomePage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Стейт для модального вікна заявки на Преміум
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedFeature, setSelectedFeature] = useState('');
+  const [telegram, setTelegram] = useState('');
+  const [plan, setPlan] = useState('Family Premium PRO');
+  const [comment, setComment] = useState('');
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await api.get('/api/auth/profile');
+        // Беремо /api/users/me, щоб завжди бачити актуальну роль з БД (навіть після видачі преміуму без перелогіну)
+        const response = await api.get('/api/users/me');
         setUser(response.data);
       } catch (error) {
         router.push('/login');
@@ -36,6 +46,35 @@ export default function HomePage() {
   const handleLogout = () => {
     Cookies.remove('access_token');
     router.push('/login');
+  };
+
+  const isPremiumOrAdmin = user?.role === 'premium' || user?.role === 'admin' || user?.role === 'super_admin';
+  const isAdminOrManager = user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'manager';
+
+  const handlePremiumFeatureClick = (featureName: string) => {
+    if (isPremiumOrAdmin) {
+      alert(`🎉 Фіча "${featureName}" активна для вашого ${user?.role?.toUpperCase()} акаунту! Налаштування відкриються у наступному оновленні.`);
+    } else {
+      setSelectedFeature(featureName);
+      setSubmitSuccess(false);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleRequestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/api/premium-requests', {
+        telegram,
+        plan,
+        comment: comment || `Хочу підключити модуль: ${selectedFeature}`,
+      });
+      setSubmitSuccess(true);
+      setTelegram('');
+      setComment('');
+    } catch (error) {
+      alert('Помилка при відправці заявки');
+    }
   };
 
   if (loading) {
@@ -53,14 +92,41 @@ export default function HomePage() {
           {/* Шапка дашборду */}
           <header className="flex justify-between items-center mb-10 bg-white/70 backdrop-blur-lg px-6 py-4 rounded-3xl shadow-sm border border-white/50 flex-wrap gap-4">
             <div>
-              <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
-                Life Manager
-              </h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
+                  Life Manager
+                </h1>
+                {isPremiumOrAdmin ? (
+                    <span className="px-3 py-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-xs font-bold rounded-full shadow-sm">
+                    👑 {user?.role?.toUpperCase()}
+                  </span>
+                ) : (
+                    <span className="px-3 py-1 bg-gray-200 text-gray-600 text-xs font-bold rounded-full">
+                    FREE ПЛАН
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-gray-500 font-medium mt-1">Привіт, {user?.name || user?.email}! 👋</p>
             </div>
 
             {/* Блок з кнопками користувача */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              {isAdminOrManager && (
+                  <Link
+                      href="/admin"
+                      className="px-5 py-2.5 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-all shadow-sm font-medium flex items-center gap-2"
+                  >
+                    <span>🛡️</span> Адмін-панель (CRM)
+                  </Link>
+              )}
+              {!isPremiumOrAdmin && (
+                  <button
+                      onClick={() => handlePremiumFeatureClick('Повний доступ до Premium')}
+                      className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl hover:opacity-90 transition-all shadow-sm font-semibold flex items-center gap-2"
+                  >
+                    <span>⭐</span> Отримати Premium
+                  </button>
+              )}
               <Link
                   href="/profile"
                   className="px-5 py-2.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl hover:bg-indigo-100 transition-all shadow-sm font-medium flex items-center gap-2"
@@ -79,8 +145,8 @@ export default function HomePage() {
           {/* Віджет курсів валют */}
           <CurrencyWidget />
 
-          {/* Сітка модулів */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {/* Сітка основних модулів */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
 
             {/* Тренування */}
             <Link href="/workouts" className="group block relative overflow-hidden bg-white/80 backdrop-blur-sm p-8 rounded-3xl border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(99,102,241,0.15)] hover:-translate-y-1 transition-all duration-300">
@@ -155,7 +221,123 @@ export default function HomePage() {
             </Link>
 
           </div>
+
+          {/* Секція Преміум-модулів (Етап 4) */}
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-extrabold text-gray-800 flex items-center gap-2">
+                <span>👑</span> Можливості Premium (Life Manager 2.0)
+              </h2>
+              <p className="text-sm text-gray-500">Розширений функціонал для автоматизації та сімейного доступу</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { title: 'Telegram-Бот', icon: '🤖', desc: 'Автоматичні нагадування про ТО авто, фільтри та завдання прямо в месенджер.' },
+              { title: 'Сімейний Режим', icon: '👨‍👩‍👧', desc: 'Спільний сімейний бюджет та список справ із дружиною чи командою.' },
+              { title: 'Хмарні Фото-Чеки', icon: '📸', desc: 'Прикріплення фотографій чеків до витрат та фото актів виконаних робіт.' },
+              { title: 'Темна Тема (PRO)', icon: '🌙', desc: 'Ексклюзивний нічний режим інтерфейсу та кастомізація кольорових схем.' },
+            ].map((item) => (
+                <div
+                    key={item.title}
+                    onClick={() => handlePremiumFeatureClick(item.title)}
+                    className="cursor-pointer group relative overflow-hidden bg-gradient-to-br from-amber-50/90 to-orange-50/90 p-6 rounded-3xl border border-amber-200/70 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center text-2xl shadow-inner">
+                      {item.icon}
+                    </div>
+                    <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${isPremiumOrAdmin ? 'bg-green-100 text-green-700' : 'bg-amber-200/80 text-amber-800'}`}>
+                    {isPremiumOrAdmin ? '🔓 Активно' : '🔒 PRO'}
+                  </span>
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-800 mb-1">{item.title}</h3>
+                  <p className="text-xs text-gray-600 leading-relaxed">{item.desc}</p>
+                </div>
+            ))}
+          </div>
+
         </div>
+
+        {/* Модальне вікно оформлення заявки на Преміум */}
+        {isModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <span>👑</span> Заявка на Premium
+                  </h3>
+                  <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl font-bold">✕</button>
+                </div>
+
+                {submitSuccess ? (
+                    <div className="text-center py-6">
+                      <div className="text-5xl mb-3">✅</div>
+                      <h4 className="text-lg font-bold text-gray-800 mb-2">Заявку успішно прийнято!</h4>
+                      <p className="text-sm text-gray-600 mb-6">
+                        Наша служба підтримки вже отримала ваш контакт і зв'яжеться з вами у Telegram для активації преміум-доступу.
+                      </p>
+                      <button
+                          onClick={() => setIsModalOpen(false)}
+                          className="w-full py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700"
+                      >
+                        Чудово, чекаю!
+                      </button>
+                    </div>
+                ) : (
+                    <form onSubmit={handleRequestSubmit} className="space-y-4">
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                        Функція <b>«{selectedFeature}»</b> доступна лише для Premium-акаунтів. Залиште ваш нікнейм у Telegram, і менеджер підключить вам доступ!
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Ваш Telegram (обов'язково)</label>
+                        <input
+                            type="text"
+                            required
+                            placeholder="@username або +380..."
+                            value={telegram}
+                            onChange={(e) => setTelegram(e.target.value)}
+                            className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Оберіть тарифний план</label>
+                        <select
+                            value={plan}
+                            onChange={(e) => setPlan(e.target.value)}
+                            className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-sm bg-white"
+                        >
+                          <option value="Family Premium PRO">Family Premium PRO ($99 / рік)</option>
+                          <option value="Personal VIP">Personal VIP ($199 / назавжди)</option>
+                          <option value="Family Minimal">Family Minimal ($15 / міс)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Коментар (опціонально)</label>
+                        <textarea
+                            rows={2}
+                            placeholder="Які функції цікавлять найбільше?"
+                            value={comment}
+                            onChange={(e) => setComment(e.target.value)}
+                            className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-sm"
+                        />
+                      </div>
+
+                      <button
+                          type="submit"
+                          className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-xl hover:opacity-95 transition-all shadow-md"
+                      >
+                        Відправити заявку в підтримку
+                      </button>
+                    </form>
+                )}
+              </div>
+            </div>
+        )}
       </div>
   );
 }
