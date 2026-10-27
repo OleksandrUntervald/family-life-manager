@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { ConfigService } from '@nestjs/config';
 import { PremiumRequest, RequestStatus } from './schemas/premium-request.schema.js';
 import { UsersService } from '../users/users.service.js';
 import { UserRole } from '../users/schemas/user.schema.js';
@@ -10,7 +11,38 @@ export class PremiumRequestsService {
     constructor(
         @InjectModel(PremiumRequest.name) private requestModel: Model<PremiumRequest>,
         private usersService: UsersService,
+        private configService: ConfigService, // Додали ConfigService для читання .env/docker
     ) {}
+
+    // Відправка повідомлення в Telegram
+    private async notifyTelegram(reqData: any, userEmail: string) {
+        const token = this.configService.get('TELEGRAM_BOT_TOKEN');
+        const chatId = this.configService.get('TELEGRAM_CHAT_ID');
+
+        if (!token || !chatId || chatId === 'ВСТАВ_СЮДИ_СВІЙ_ID') return;
+
+        const text = `🔥 <b>Нова заявка на Premium!</b>\n\n` +
+            `👤 <b>Від:</b> ${reqData.name} (${userEmail})\n` +
+            `✈️ <b>Telegram:</b> ${reqData.telegram}\n` +
+            `📦 <b>Пакет:</b> ${reqData.plan}\n` +
+            `💬 <b>Коментар:</b> ${reqData.comment || '—'}`;
+
+        const url = `https://api.telegram.org/bot${token}/sendMessage`;
+
+        try {
+            await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: text,
+                    parse_mode: 'HTML'
+                })
+            });
+        } catch (err) {
+            console.error('Помилка відправки в Telegram:', err);
+        }
+    }
 
     // Створення заявки від реального користувача
     async createRequest(userId: string, telegram: string, plan = 'Family Premium PRO', comment = '') {
@@ -27,10 +59,16 @@ export class PremiumRequestsService {
             alreadyPaid: 0,
             comment,
         });
-        return newReq.save();
+
+        const savedReq = await newReq.save();
+
+        // Відправляємо сповіщення у фоні (не блокуючи відповідь фронтенду)
+        this.notifyTelegram(savedReq, user ? user.email : 'unknown').catch(console.error);
+
+        return savedReq;
     }
 
-    // Отримання заявок з пагінацією (по 25 штук, від останньої до першої - вимога диплому)
+    // Отримання заявок з пагінацією
     async findAllPaginated(page = 1, limit = 25, status?: string, search?: string) {
         const query: any = {};
         if (status && status !== 'all') {
@@ -65,7 +103,7 @@ export class PremiumRequestsService {
         };
     }
 
-    // Оновлення заявки менеджером/адміном (і автоматична видача Преміуму, якщо статус Agree)
+    // Оновлення заявки менеджером/адміном
     async updateRequest(id: string, updateData: any, managerName: string) {
         const updated = await this.requestModel.findByIdAndUpdate(
             id,
@@ -73,7 +111,7 @@ export class PremiumRequestsService {
             { new: true },
         ).exec();
 
-        // Якщо заявку схвалили і там прив'язаний реальний юзер — автоматично даємо йому PREMIUM!
+        // Якщо заявку схвалили і там прив'язаний реальний юзер — автоматично даємо йому PREMIUM
         if (updated && updated.status === RequestStatus.AGREE && updated.userId) {
             await this.usersService.updateUserRole(updated.userId.toString(), UserRole.PREMIUM);
         }
@@ -81,7 +119,7 @@ export class PremiumRequestsService {
         return updated;
     }
 
-    // Генератор нашого власного дампу на 105 заявок (щоб було 5 сторінок по 25 штук для захисту!)
+    // Генератор тестового дампу
     async seedMockData() {
         const count = await this.requestModel.countDocuments();
         if (count >= 100) {
@@ -116,7 +154,7 @@ export class PremiumRequestsService {
                 alreadyPaid,
                 manager: status === RequestStatus.NEW ? null : managers[Math.floor(Math.random() * managers.length)],
                 comment: i % 4 === 0 ? 'Хочу підключити сімейний бюджет та Telegram-сповіщення' : '',
-                createdAt: new Date(Date.now() - (105 - i) * 3600 * 1000 * 6), // Різний час створення
+                createdAt: new Date(Date.now() - (105 - i) * 3600 * 1000 * 6), // Виправлений формат
             });
         }
 
