@@ -4,22 +4,26 @@ import { Document, Types } from 'mongoose';
 @Schema({ timestamps: true })
 export class Equipment extends Document {
     @Prop({ required: true })
-    name: string; // Наприклад: "Mazda 3 (Мастило і фільтри)" або "Фільтр Ecosoft"
+    name: string;
 
     @Prop({ required: true, enum: ['car', 'home', 'other'] })
-    category: string; // Категорія для зручності
+    category: string;
 
     @Prop()
-    lastServiceDate: string; // Дата останнього обслуговування (YYYY-MM-DD)
+    lastServiceDate: string;
 
     @Prop()
-    nextServiceDate: string; // Коли робити наступне обслуговування
+    nextServiceDate: string;
 
     @Prop()
-    mileageOrNote: string; // Наприклад: "Пробіг 185 000 км" або "Заміна нижніх картриджів"
+    mileageOrNote: string;
 
     @Prop({ default: '' })
     comment: string;
+
+    // ДОДАНО ПОЛЕ ДЛЯ ФОТО:
+    @Prop({ required: false })
+    photoUrl: string;
 
     @Prop({ type: Types.ObjectId, ref: 'User', required: true })
     userId: Types.ObjectId;

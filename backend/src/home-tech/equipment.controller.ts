@@ -1,12 +1,16 @@
-import {Controller, Get, Post, Delete, Body, Param, UseGuards, Request, Patch} from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards, Request, Patch, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { EquipmentService } from './equipment.service.js';
-import { CreateEquipmentDto } from './dto/create-equipment.dto.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
 
 @UseGuards(JwtAuthGuard)
 @Controller('home-tech')
 export class EquipmentController {
-    constructor(private readonly equipmentService: EquipmentService) {}
+    constructor(
+        private readonly equipmentService: EquipmentService,
+        private readonly cloudinaryService: CloudinaryService // <-- Підключили сервіс
+    ) {}
 
     @Get()
     findAll(@Request() req: any) {
@@ -14,8 +18,16 @@ export class EquipmentController {
     }
 
     @Post()
-    create(@Request() req: any, @Body() dto: CreateEquipmentDto) {
-        return this.equipmentService.create(req.user.id, dto);
+    @UseInterceptors(FileInterceptor('file')) // Чекаємо на файл
+    async create(@Request() req: any, @Body() dto: any, @UploadedFile() file: any) {
+        const equipmentData = { ...dto };
+
+        // Якщо є файл, вантажимо його в окрему папку техніки
+        if (file) {
+            equipmentData.photoUrl = await this.cloudinaryService.uploadFile(file, 'lifemanager_equipment');
+        }
+
+        return this.equipmentService.create(req.user.id, equipmentData);
     }
 
     @Delete(':id')
@@ -24,11 +36,20 @@ export class EquipmentController {
     }
 
     @Patch(':id')
-    update(
+    @UseInterceptors(FileInterceptor('file'))
+    async update(
         @Request() req: any,
         @Param('id') id: string,
-        @Body() body: any
+        @Body() body: any,
+        @UploadedFile() file: any
     ) {
-        return this.equipmentService.update(req.user.id, id, body);
+        const updateData = { ...body };
+
+        // Якщо при редагуванні закинули нове фото
+        if (file) {
+            updateData.photoUrl = await this.cloudinaryService.uploadFile(file, 'lifemanager_equipment');
+        }
+
+        return this.equipmentService.update(req.user.id, id, updateData);
     }
 }

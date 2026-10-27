@@ -7,13 +7,18 @@ services:
       - "3000:3000"
     volumes:
       - ./backend:/app
-      - /app/node_modules # Защищаем Linux модули от перезаписи
+      - /app/node_modules
+      # Захищаємо Linux модулі від перезапису
     environment:
       - MONGO_URI=mongodb+srv://untervaldthebest_db_user:Kos28Kos28.@cluster0.dq6tawx.mongodb.net/lifemanager?retryWrites=true&w=majority
       - JWT_SECRET=SuperSecretLifeManagerKey2026_!@#
-      # ДОБАВЛЕНЫ НАСТРОЙКИ ТЕЛЕГРАМ БОТА:
+      # ДОДАНО НАЛАШТУВАННЯ ТЕЛЕГРАМ БОТА:
       - TELEGRAM_BOT_TOKEN=8802635395:AAGetaGt4Eb4nag_06QsbBAEgoqc1qINsP8
       - TELEGRAM_CHAT_ID=788005704
+      # ДОДАНО НАЛАШТУВАННЯ CLOUDINARY (ДЛЯ ФОТО):
+      - CLOUDINARY_CLOUD_NAME=snngxyvu
+      - CLOUDINARY_API_KEY=475795924591314
+      - CLOUDINARY_API_SECRET=adx8lAAr1r5fLU1QyzXy_5E3sUY
     restart: always
 
   frontend:

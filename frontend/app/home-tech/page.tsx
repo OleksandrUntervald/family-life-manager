@@ -13,6 +13,7 @@ interface EquipmentItem {
     nextServiceDate?: string;
     mileageOrNote?: string;
     comment?: string;
+    photoUrl?: string; // Додали поле фото
 }
 
 export default function HomeTechPage() {
@@ -21,6 +22,7 @@ export default function HomeTechPage() {
     const [loading, setLoading] = useState(true);
 
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [file, setFile] = useState<File | null>(null); // Стан для файлу
 
     const [formData, setFormData] = useState({
         name: '',
@@ -50,21 +52,33 @@ export default function HomeTechPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Використовуємо FormData для файлів
+        const payload = new FormData();
+        payload.append('name', formData.name);
+        payload.append('category', formData.category);
+        payload.append('lastServiceDate', formData.lastServiceDate);
+        payload.append('nextServiceDate', formData.nextServiceDate);
+        payload.append('mileageOrNote', formData.mileageOrNote);
+        payload.append('comment', formData.comment);
+        if (file) {
+            payload.append('file', file);
+        }
+
         try {
             if (editingId) {
-                await api.patch(`/api/home-tech/${editingId}`, formData);
+                await api.patch(`/api/home-tech/${editingId}`, payload);
                 setEditingId(null);
             } else {
-                await api.post('/api/home-tech', formData);
+                await api.post('/api/home-tech', payload);
             }
             setFormData({
-                name: '',
-                category: 'car',
-                lastServiceDate: '',
-                nextServiceDate: '',
-                mileageOrNote: '',
-                comment: ''
+                name: '', category: 'car', lastServiceDate: '', nextServiceDate: '', mileageOrNote: '', comment: ''
             });
+            setFile(null);
+            const fileInput = document.getElementById('equipment-file-upload') as HTMLInputElement;
+            if (fileInput) fileInput.value = '';
+
             fetchItems();
         } catch (error) {
             console.error('Помилка збереження запису', error);
@@ -81,12 +95,14 @@ export default function HomeTechPage() {
             mileageOrNote: item.mileageOrNote || '',
             comment: item.comment || ''
         });
+        setFile(null);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const cancelEdit = () => {
         setEditingId(null);
         setFormData({ name: '', category: 'car', lastServiceDate: '', nextServiceDate: '', mileageOrNote: '', comment: '' });
+        setFile(null);
     };
 
     const handleDelete = async (id: string) => {
@@ -193,8 +209,20 @@ export default function HomeTechPage() {
                                 value={formData.comment} onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
                             />
                         </div>
-                        <div className="md:col-span-2 flex justify-end mt-2">
-                            <button type="submit" className={`px-6 py-3 text-white font-bold rounded-2xl shadow-md transition-all text-sm ${editingId ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600' : 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600'}`}>
+
+                        {/* ДОДАНО: Блок для завантаження фотографії (на всю ширину) */}
+                        <div className="md:col-span-2 flex flex-col md:flex-row justify-between items-center bg-gray-50/50 p-4 rounded-2xl border border-gray-200 mt-2 gap-4">
+                            <div className="w-full md:w-auto">
+                                <label className="block text-xs font-medium text-gray-500 mb-2">Фото (чека, деталі, звіту)</label>
+                                <input
+                                    id="equipment-file-upload"
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                                    className="text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer w-full"
+                                />
+                            </div>
+                            <button type="submit" className={`w-full md:w-auto px-8 py-3 text-white font-bold rounded-2xl shadow-md transition-all text-sm ${editingId ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600' : 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600'}`}>
                                 {editingId ? 'Зберегти зміни' : 'Зберегти запис'}
                             </button>
                         </div>
@@ -213,7 +241,15 @@ export default function HomeTechPage() {
                                 <div key={item._id} className={`bg-white/80 backdrop-blur-md p-6 rounded-3xl shadow-sm border space-y-3 flex flex-col justify-between group transition-all ${editingId === item._id ? 'border-amber-300 ring-1 ring-amber-100' : 'border-white/60'}`}>
                                     <div className="space-y-2">
                                         <div className="flex justify-between items-start">
-                                            <h4 className="font-bold text-gray-800 text-base">{item.name}</h4>
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="font-bold text-gray-800 text-base">{item.name}</h4>
+                                                {/* ДОДАНО: Відображення посилання на фото */}
+                                                {item.photoUrl && (
+                                                    <a href={item.photoUrl} target="_blank" rel="noopener noreferrer" className="px-2 py-1 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors">
+                                                        📸 Фото
+                                                    </a>
+                                                )}
+                                            </div>
                                             {getCategoryBadge(item.category)}
                                         </div>
                                         {item.mileageOrNote && (

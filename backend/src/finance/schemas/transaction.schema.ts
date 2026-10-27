@@ -9,19 +9,23 @@ export enum TransactionType {
 @Schema({ timestamps: true })
 export class Transaction extends Document {
     @Prop({ required: true })
-    title: string; // Наприклад: "Зарплата", "Заправка авто", "Продукти"
+    title: string;
 
     @Prop({ required: true })
-    amount: number; // Сума
+    amount: number;
 
     @Prop({ type: String, enum: TransactionType, required: true })
-    type: TransactionType; // Дохід чи витрата
+    type: TransactionType;
 
     @Prop({ required: true })
-    category: string; // Наприклад: "Авто", "Дім", "Робота"
+    category: string;
 
     @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-    userId: Types.ObjectId; // Прив'язка до користувача
+    userId: Types.ObjectId;
+
+    // ДОДАЛИ НОВЕ ПОЛЕ ДЛЯ ЧЕКА:
+    @Prop({ required: false })
+    receiptUrl: string;
 }
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);
