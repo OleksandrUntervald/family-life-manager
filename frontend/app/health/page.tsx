@@ -32,7 +32,6 @@ interface DailyStats {
 export default function HealthPage() {
     const router = useRouter();
 
-    // Виправлення помилки гідратації: встановлюємо дату лише на клієнті
     const [selectedDate, setSelectedDate] = useState('');
     const [data, setData] = useState<DailyStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -64,10 +63,10 @@ export default function HealthPage() {
             const res = await api.get(`/api/health/stats/${date}`);
             setData(res.data);
             setFormData({
-                consumedCalories: res.data.record.consumedCalories ? String(res.data.record.consumedCalories) : '',
-                steps: res.data.record.steps ? String(res.data.record.steps) : '',
-                weight: res.data.record.weight ? String(res.data.record.weight) : '',
-                water: res.data.record.water ? String(res.data.record.water) : ''
+                consumedCalories: res.data.record?.consumedCalories ? String(res.data.record.consumedCalories) : '',
+                steps: res.data.record?.steps ? String(res.data.record.steps) : '',
+                weight: res.data.record?.weight ? String(res.data.record.weight) : '',
+                water: res.data.record?.water ? String(res.data.record.water) : ''
             });
             if (res.data.userParams) {
                 setUserParams(res.data.userParams);
@@ -87,12 +86,17 @@ export default function HealthPage() {
     const handleDailySubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            // ВИПРАВЛЕНО: Якщо поле порожнє, беремо збережену вагу, а не 0
+            const safeWeight = formData.weight === ''
+                ? (data?.record?.weight || data?.stats?.currentWeight || 0)
+                : Number(formData.weight);
+
             await api.post('/api/health', {
                 date: selectedDate,
-                consumedCalories: formData.consumedCalories ? Number(formData.consumedCalories) : 0,
-                steps: formData.steps ? Number(formData.steps) : 0,
-                weight: formData.weight ? Number(formData.weight) : 0,
-                water: formData.water ? Number(formData.water) : 0,
+                consumedCalories: formData.consumedCalories === '' ? (data?.record?.consumedCalories || 0) : Number(formData.consumedCalories),
+                steps: formData.steps === '' ? (data?.record?.steps || 0) : Number(formData.steps),
+                weight: safeWeight,
+                water: formData.water === '' ? (data?.record?.water || 0) : Number(formData.water),
             });
             fetchStats(selectedDate);
         } catch (error) {
@@ -122,11 +126,15 @@ export default function HealthPage() {
         setFormData(prev => ({ ...prev, water: String(newWater) }));
 
         try {
+            const safeWeight = formData.weight === ''
+                ? (data?.record?.weight || data?.stats?.currentWeight || 0)
+                : Number(formData.weight);
+
             await api.post('/api/health', {
                 date: selectedDate,
-                consumedCalories: formData.consumedCalories ? Number(formData.consumedCalories) : 0,
-                steps: formData.steps ? Number(formData.steps) : 0,
-                weight: formData.weight ? Number(formData.weight) : 0,
+                consumedCalories: formData.consumedCalories === '' ? (data?.record?.consumedCalories || 0) : Number(formData.consumedCalories),
+                steps: formData.steps === '' ? (data?.record?.steps || 0) : Number(formData.steps),
+                weight: safeWeight,
                 water: newWater,
             });
             fetchStats(selectedDate);
@@ -142,7 +150,7 @@ export default function HealthPage() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-6 md:p-10 text-gray-800">
             <div className="max-w-4xl mx-auto space-y-8">
-                <div className="flex justify-between items-center bg-white/70 backdrop-blur-lg px-6 py-4 rounded-3xl shadow-sm border border-white/50">
+                <div className="flex justify-between items-center bg-white/70 backdrop-blur-lg px-6 py-4 rounded-3xl shadow-sm border border-white/50 flex-wrap gap-4">
                     <div>
                         <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-teal-600 to-emerald-600">
                             🍏 Розумний Фітнес-Асистент
@@ -194,7 +202,7 @@ export default function HealthPage() {
                     </div>
                     <div className="text-right">
                         <p className="text-xs text-gray-400">Базовий метаболізм (BMR)</p>
-                        <p className="text-lg font-bold text-teal-700">{data?.stats.bmr} ккал / день</p>
+                        <p className="text-lg font-bold text-teal-700">{data?.stats?.bmr || 0} ккал / день</p>
                     </div>
                 </div>
 
@@ -202,11 +210,11 @@ export default function HealthPage() {
                     <div className="bg-white/80 backdrop-blur-md p-6 rounded-3xl shadow-sm border border-white/60 space-y-3">
                         <div className="flex justify-between items-center">
                             <span className="text-sm font-bold text-gray-500">🔥 Калорії (Баланс)</span>
-                            <span className="text-xs bg-teal-100 text-teal-800 px-2.5 py-1 rounded-full font-bold">Ціль: {data?.stats.dynamicCalorieGoal}</span>
+                            <span className="text-xs bg-teal-100 text-teal-800 px-2.5 py-1 rounded-full font-bold">Ціль: {data?.stats?.dynamicCalorieGoal || 0}</span>
                         </div>
                         <div>
-                            <p className="text-3xl font-extrabold text-gray-800">{data?.stats.caloriesLeft} <span className="text-sm font-normal text-gray-400">залишилось</span></p>
-                            <p className="text-xs text-gray-500 mt-1">З'їдено: <span className="font-bold text-gray-700">{formData.consumedCalories || 0}</span> | Спалено: <span className="font-bold text-teal-600">+{data?.stats.burnedFromSteps}</span></p>
+                            <p className="text-3xl font-extrabold text-gray-800">{data?.stats?.caloriesLeft || 0} <span className="text-sm font-normal text-gray-400">залишилось</span></p>
+                            <p className="text-xs text-gray-500 mt-1">З'їдено: <span className="font-bold text-gray-700">{formData.consumedCalories || 0}</span> | Спалено: <span className="font-bold text-teal-600">+{data?.stats?.burnedFromSteps || 0}</span></p>
                         </div>
                     </div>
                     <div className="bg-white/80 backdrop-blur-md p-6 rounded-3xl shadow-sm border border-white/60 space-y-3">
@@ -216,7 +224,7 @@ export default function HealthPage() {
                         </div>
                         <div>
                             <p className="text-3xl font-extrabold text-gray-800">{formData.steps || 0}</p>
-                            <p className="text-xs text-gray-500 mt-1">Енергія від ходьби: <span className="font-bold text-teal-600">~{data?.stats.burnedFromSteps} ккал</span></p>
+                            <p className="text-xs text-gray-500 mt-1">Енергія від ходьби: <span className="font-bold text-teal-600">~{data?.stats?.burnedFromSteps || 0} ккал</span></p>
                         </div>
                     </div>
                     <div className="bg-white/80 backdrop-blur-md p-6 rounded-3xl shadow-sm border border-white/60 space-y-3">
@@ -239,15 +247,15 @@ export default function HealthPage() {
                     <form onSubmit={handleDailySubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Спожито калорій (ккал)</label>
-                            <input type="number" min="0" className="w-full p-3.5 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500 text-gray-800" value={formData.consumedCalories} onChange={(e) => setFormData({ ...formData, consumedCalories: e.target.value })} />
+                            <input type="number" min="0" placeholder="0" className="w-full p-3.5 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500 text-gray-800" value={formData.consumedCalories} onChange={(e) => setFormData({ ...formData, consumedCalories: e.target.value })} />
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Пройдено кроків</label>
-                            <input type="number" min="0" className="w-full p-3.5 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500 text-gray-800" value={formData.steps} onChange={(e) => setFormData({ ...formData, steps: e.target.value })} />
+                            <input type="number" min="0" placeholder="0" className="w-full p-3.5 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500 text-gray-800" value={formData.steps} onChange={(e) => setFormData({ ...formData, steps: e.target.value })} />
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Поточна вага (кг)</label>
-                            <input type="number" min="0" step="0.1" className="w-full p-3.5 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500 text-gray-800" value={formData.weight} onChange={(e) => setFormData({ ...formData, weight: e.target.value })} />
+                            <input type="number" min="0" step="0.1" placeholder="Залишити поточну" className="w-full p-3.5 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500 text-gray-800" value={formData.weight} onChange={(e) => setFormData({ ...formData, weight: e.target.value })} />
                         </div>
                         <div>
                             <button type="submit" className="w-full py-3.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white font-bold rounded-2xl shadow-md transition-all text-sm">Зберегти день</button>

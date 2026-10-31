@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards, Request, BadRequestException } from '@nestjs/common';
+import { Types } from 'mongoose';
 import { TasksService } from './tasks.service.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -18,13 +19,9 @@ export class TasksController {
         return this.tasksService.findAll(req.user.id);
     }
 
-    @Patch(':id/toggle')
-    toggleComplete(@Request() req: any, @Param('id') id: string) {
-        return this.tasksService.toggleComplete(id, req.user.id);
-    }
-
     @Delete(':id')
     remove(@Request() req: any, @Param('id') id: string) {
+        if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Некоректний ID');
         return this.tasksService.remove(id, req.user.id);
     }
 
@@ -32,8 +29,9 @@ export class TasksController {
     updateTask(
         @Request() req: any,
         @Param('id') id: string,
-        @Body() body: { title: string; date: string }
+        @Body() body: any // Приймаємо всі оновлення (status, title, notes, assignedTo)
     ) {
-        return this.tasksService.updateTask(req.user.id, id, body.title, body.date);
+        if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Некоректний ID');
+        return this.tasksService.updateTask(req.user.id, id, body);
     }
 }

@@ -1,4 +1,5 @@
-import { Controller, Get, Patch, Body, Param, UseGuards, Request, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Patch, Body, Param, UseGuards, Request, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Types } from 'mongoose';
 import { UsersService } from './users.service.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { UserRole } from './schemas/user.schema.js';
@@ -7,7 +8,6 @@ import { UserRole } from './schemas/user.schema.js';
 export class UsersController {
     constructor(private readonly usersService: UsersService) {}
 
-    // Отримання актуальних даних поточного юзера (разом із роллю)
     @UseGuards(JwtAuthGuard)
     @Get('me')
     async getMe(@Request() req: any) {
@@ -44,9 +44,26 @@ export class UsersController {
         return this.usersService.findAllUsers();
     }
 
+    // ДОДАНО: Ендпоінт для загальної аналітики
+    @UseGuards(JwtAuthGuard)
+    @Get('admin/stats')
+    async getAdminStats(@Request() req: any) {
+        const currentUser = await this.usersService.findById(req.user.id);
+        if (currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.SUPER_ADMIN && currentUser?.role !== UserRole.MANAGER) {
+            throw new ForbiddenException('Доступ лише для адміністрації');
+        }
+        return this.usersService.getPlatformStats();
+    }
+
     @UseGuards(JwtAuthGuard)
     @Patch('admin/:id/role')
     async changeRole(@Request() req: any, @Param('id') targetId: string, @Body('role') role: UserRole) {
+        if (!Types.ObjectId.isValid(targetId)) throw new BadRequestException('Некоректний ID користувача');
+
+        if (!Object.values(UserRole).includes(role)) {
+            throw new BadRequestException('Неприпустима роль');
+        }
+
         const currentUser = await this.usersService.findById(req.user.id);
         if (currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.SUPER_ADMIN) {
             throw new ForbiddenException('Тільки головний адмін може змінювати ролі');
@@ -57,6 +74,8 @@ export class UsersController {
     @UseGuards(JwtAuthGuard)
     @Patch('admin/:id/ban')
     async toggleBan(@Request() req: any, @Param('id') targetId: string) {
+        if (!Types.ObjectId.isValid(targetId)) throw new BadRequestException('Некоректний ID користувача');
+
         const currentUser = await this.usersService.findById(req.user.id);
         if (currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.SUPER_ADMIN) {
             throw new ForbiddenException('Тільки головний адмін може блокувати користувачів');

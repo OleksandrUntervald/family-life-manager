@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "./providers"; // <-- Підключаємо провайдер теми
+import { ThemeProvider } from "./providers";
+import Navbar from "@/components/Navbar"; // <-- Імпортуємо навігацію
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -24,13 +25,15 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        // suppressHydrationWarning потрібен для next-themes, щоб не було помилок при завантаженні
         <html lang="uk" suppressHydrationWarning>
         <body
-            className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300 min-h-screen`}
+            className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300 min-h-screen flex flex-col`}
         >
         <ThemeProvider>
-            {children}
+            <Navbar /> {/* <-- Навігація тепер спільна для всіх сторінок */}
+            <main className="flex-1 relative">
+                {children}
+            </main>
         </ThemeProvider>
         </body>
         </html>

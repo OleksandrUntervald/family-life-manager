@@ -1,11 +1,15 @@
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { UsersService } from '../users/users.service.js';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-    constructor(private configService: ConfigService) {
+    constructor(
+        private configService: ConfigService,
+        private usersService: UsersService // <-- Підключили сервіс юзерів
+    ) {
         super({
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
@@ -13,9 +17,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         });
     }
 
-    // Цей метод викликається автоматично, якщо токен валідний
     async validate(payload: any) {
-        // Повертаємо об'єкт, який NestJS автоматично покладе у request.user
-        return { id: payload.sub, email: payload.email, role: payload.role };
+        // Звертаємося до бази, щоб отримати найсвіжіші дані юзера
+        const user = await this.usersService.findById(payload.sub);
+
+        if (!user) {
+            throw new UnauthorizedException('Користувача не знайдено');
+        }
+
+        // ВИПРАВЛЕНО: Якщо користувач заблокований — відхиляємо будь-який запит
+        if (user.isBanned) {
+            throw new UnauthorizedException('Ваш акаунт заблоковано адміністратором');
+        }
+
+        return { id: user._id, email: user.email, role: user.role };
     }
 }

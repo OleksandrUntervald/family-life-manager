@@ -1,16 +1,17 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module.js';
-import { ProfanityInterceptor } from './common/profanity.interceptor.js';
 
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
 
     app.setGlobalPrefix('api');
 
+    // ВИПРАВЛЕНО: Нормальний CORS для роботи з різними портами
     app.enableCors({
-        origin: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+        origin: true,
         credentials: true,
+        methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     });
 
     app.useGlobalPipes(
@@ -21,10 +22,9 @@ async function bootstrap() {
         }),
     );
 
-    // Підключаємо глобальний фільтр нецензурної лексики
-    app.useGlobalInterceptors(new ProfanityInterceptor());
+    // ВИДАЛЕНО: ProfanityInterceptor (щоб не псував паролі та українські назви міст)
 
     await app.listen(3000);
 }
-// Обробляємо проміс, щоб WebStorm не сварився
+
 bootstrap().catch((err) => console.error(err));
