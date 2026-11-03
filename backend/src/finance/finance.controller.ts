@@ -17,23 +17,23 @@ export class FinanceController {
     @UseInterceptors(FileInterceptor('file'))
     async create(@Request() req: any, @Body() dto: any, @UploadedFile() file: any) {
         let receiptUrl = '';
+        if (file) receiptUrl = await this.cloudinaryService.uploadFile(file, 'lifemanager_finance');
 
-        if (file) {
-            receiptUrl = await this.cloudinaryService.uploadFile(file, 'lifemanager_finance');
-        }
+        // FormData передає boolean як строку
+        const isShared = dto.isShared === 'true' || dto.isShared === true;
 
-        const transactionData = { ...dto, amount: Number(dto.amount) };
+        const transactionData = { ...dto, amount: Number(dto.amount), isShared };
         if (receiptUrl) transactionData.receiptUrl = receiptUrl;
 
         return this.financeService.create(req.user.id, transactionData);
     }
 
     @Get('summary')
-    getSummary(@Request() req: any) {
-        return this.financeService.getSummary(req.user.id);
+    getSummary(@Request() req: any, @Query('isShared') isShared?: string) {
+        const isSharedBool = isShared === 'true';
+        return this.financeService.getSummary(req.user.id, isSharedBool);
     }
 
-    // ВИПРАВЛЕНО: Додано підтримку query-параметрів для пагінації та фільтрації
     @Get()
     findAll(
         @Request() req: any,
@@ -42,7 +42,8 @@ export class FinanceController {
         @Query('sortBy') sortBy?: string,
         @Query('sortOrder') sortOrder?: 'asc' | 'desc',
         @Query('type') type?: string,
-        @Query('category') category?: string
+        @Query('category') category?: string,
+        @Query('isShared') isShared?: string
     ) {
         return this.financeService.findAll(
             req.user.id,
@@ -51,7 +52,8 @@ export class FinanceController {
             sortBy || 'createdAt',
             sortOrder || 'desc',
             type,
-            category
+            category,
+            isShared === 'true'
         );
     }
 
@@ -73,6 +75,8 @@ export class FinanceController {
 
         const updateData = { ...body };
         delete updateData.userId;
+        delete updateData.familyId;
+        delete updateData.isShared;
 
         if (updateData.amount) updateData.amount = Number(updateData.amount);
 

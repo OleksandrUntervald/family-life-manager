@@ -6,10 +6,10 @@ export enum UserRole {
     PREMIUM = 'premium',
     MANAGER = 'manager',
     ADMIN = 'admin',
-    SUPER_ADMIN = 'super_admin', // Залишаємо для зворотної сумісності
+    SUPER_ADMIN = 'super_admin',
 }
 
-@Schema({ timestamps: true }) // Автоматично додасть createdAt та updatedAt
+@Schema({ timestamps: true })
 export class User extends Document {
     @Prop({ required: true, unique: true })
     email: string;
@@ -26,22 +26,22 @@ export class User extends Document {
     @Prop({ default: false })
     isBanned: boolean;
 
-    // Посилання на команди (модуль Teams зробимо пізніше)
-    @Prop({ type: [{ type: Types.ObjectId, ref: 'Team' }], default: [] })
-    teams: Types.ObjectId[];
+    // ДОДАНО: Прив'язка до родини (замість teams)
+    @Prop({ type: Types.ObjectId, ref: 'Family', default: null })
+    familyId: Types.ObjectId;
 
     // Базові фізичні параметри для формул здоров'я
     @Prop({ default: 170 })
-    height: number; // Зріст
+    height: number;
 
     @Prop({ default: 30 })
-    age: number; // Вік
+    age: number;
 
     @Prop({ default: 'male' })
-    gender: string; // 'male' або 'female'
+    gender: string;
 
     @Prop({ default: 70 })
-    targetWeight: number; // Цільова вага (до якої прагнемо)
+    targetWeight: number;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

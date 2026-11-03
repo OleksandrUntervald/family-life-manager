@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, IsEnum } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsEnum, IsBoolean } from 'class-validator';
 import { TaskStatus } from '../schemas/task.schema.js';
 
 export class CreateTaskDto {
@@ -21,4 +21,9 @@ export class CreateTaskDto {
     @IsOptional()
     @IsEnum(TaskStatus)
     status?: TaskStatus;
+
+    // ДОДАНО: Прапорець сімейного завдання
+    @IsOptional()
+    @IsBoolean()
+    isShared?: boolean;
 }

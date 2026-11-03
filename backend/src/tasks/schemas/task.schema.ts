@@ -26,6 +26,13 @@ export class Task extends Document {
 
     @Prop({ type: Types.ObjectId, ref: 'User', required: true })
     userId: Types.ObjectId;
+
+    // ДОДАНО: Поля для гібридної моделі (Родина)
+    @Prop({ type: Types.ObjectId, ref: 'Family', default: null })
+    familyId: Types.ObjectId;
+
+    @Prop({ default: false })
+    isShared: boolean;
 }
 
 export const TaskSchema = SchemaFactory.createForClass(Task);

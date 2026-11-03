@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsNumber, IsString, Min } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumber, IsString, Min, IsOptional } from 'class-validator';
 import { TransactionType } from '../schemas/transaction.schema.js';
 
 export class CreateTransactionDto {
@@ -16,4 +16,8 @@ export class CreateTransactionDto {
     @IsString()
     @IsNotEmpty({ message: 'Категорія обовʼязкова' })
     category: string;
+
+    // ДОДАНО: Прапорець сімейної транзакції
+    @IsOptional()
+    isShared?: string | boolean;
 }

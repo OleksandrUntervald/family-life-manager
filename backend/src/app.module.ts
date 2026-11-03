@@ -9,8 +9,9 @@ import { TasksModule } from './tasks/tasks.module.js';
 import { HealthModule } from './health/health.module.js';
 import { EquipmentModule } from './home-tech/equipment.module.js';
 import { PremiumRequestsModule } from './premium-requests/premium-requests.module.js';
-// ДОДАЄМО НАШ НОВИЙ МОДУЛЬ:
 import { CloudinaryModule } from './cloudinary/cloudinary.module.js';
+// ДОДАЄМО НАШ НОВИЙ МОДУЛЬ:
+import { FamiliesModule } from './families/families.module.js';
 
 @Module({
   imports: [
@@ -33,7 +34,8 @@ import { CloudinaryModule } from './cloudinary/cloudinary.module.js';
     HealthModule,
     EquipmentModule,
     PremiumRequestsModule,
-    CloudinaryModule, // <-- Підключили хмарне сховище для фотографій
+    CloudinaryModule,
+    FamiliesModule, // <-- Підключили модуль Родини
   ],
   controllers: [],
   providers: [],

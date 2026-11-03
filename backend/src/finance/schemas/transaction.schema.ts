@@ -23,9 +23,15 @@ export class Transaction extends Document {
     @Prop({ type: Types.ObjectId, ref: 'User', required: true })
     userId: Types.ObjectId;
 
-    // ДОДАЛИ НОВЕ ПОЛЕ ДЛЯ ЧЕКА:
     @Prop({ required: false })
     receiptUrl: string;
+
+    // ДОДАНО: Поля для гібридної моделі (Родина)
+    @Prop({ type: Types.ObjectId, ref: 'Family', default: null })
+    familyId: Types.ObjectId;
+
+    @Prop({ default: false })
+    isShared: boolean;
 }
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);

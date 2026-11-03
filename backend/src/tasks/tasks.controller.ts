@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards, Request, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards, Request, BadRequestException, Query } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { TasksService } from './tasks.service.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
@@ -15,8 +15,9 @@ export class TasksController {
     }
 
     @Get()
-    findAll(@Request() req: any) {
-        return this.tasksService.findAll(req.user.id);
+    findAll(@Request() req: any, @Query('isShared') isShared: string) {
+        const isSharedBool = isShared === 'true';
+        return this.tasksService.findAll(req.user.id, isSharedBool);
     }
 
     @Delete(':id')
@@ -29,7 +30,7 @@ export class TasksController {
     updateTask(
         @Request() req: any,
         @Param('id') id: string,
-        @Body() body: any // Приймаємо всі оновлення (status, title, notes, assignedTo)
+        @Body() body: any
     ) {
         if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Некоректний ID');
         return this.tasksService.updateTask(req.user.id, id, body);

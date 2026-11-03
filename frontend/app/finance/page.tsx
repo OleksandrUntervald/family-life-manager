@@ -13,6 +13,7 @@ interface Transaction {
     category: string;
     createdAt: string;
     receiptUrl?: string;
+    isShared?: boolean;
 }
 
 interface Summary {
@@ -30,13 +31,16 @@ interface Meta {
 
 export default function FinancePage() {
     const router = useRouter();
+
+    // Тумблер режиму
+    const [viewMode, setViewMode] = useState<'personal' | 'family'>('personal');
+
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [meta, setMeta] = useState<Meta>({ total: 0, page: 1, limit: 10, totalPages: 1 });
     const [summary, setSummary] = useState<Summary>({ totalIncome: 0, totalExpense: 0, balance: 0 });
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-    // Стани для фільтрів, сортування та пагінації
     const [page, setPage] = useState(1);
     const [sortBy, setSortBy] = useState('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -56,18 +60,22 @@ export default function FinancePage() {
     const fetchData = useCallback(async () => {
         try {
             setErrorMsg(null);
+            setLoading(true);
+            const isShared = viewMode === 'family';
+
             const queryParams = new URLSearchParams({
                 page: page.toString(),
                 limit: '10',
                 sortBy,
                 sortOrder,
                 type: filterType,
+                isShared: isShared.toString(),
                 ...(filterCategory && { category: filterCategory }),
             });
 
             const [txRes, sumRes] = await Promise.all([
                 api.get(`/api/finance?${queryParams.toString()}`),
-                api.get('/api/finance/summary')
+                api.get(`/api/finance/summary?isShared=${isShared}`)
             ]);
 
             setTransactions(txRes.data.data);
@@ -78,12 +86,12 @@ export default function FinancePage() {
             if (error.response?.status === 401) {
                 router.push('/login');
             } else {
-                setErrorMsg('Не вдалося завантажити дані. Спробуйте пізніше.');
+                setErrorMsg('Не вдалося завантажити дані. Перевірте, чи ви перебуваєте в родині.');
             }
         } finally {
             setLoading(false);
         }
-    }, [page, sortBy, sortOrder, filterType, filterCategory, router]);
+    }, [page, sortBy, sortOrder, filterType, filterCategory, viewMode, router]);
 
     useEffect(() => {
         fetchData();
@@ -98,6 +106,7 @@ export default function FinancePage() {
         payload.append('amount', formData.amount);
         payload.append('type', formData.type);
         payload.append('category', formData.category);
+        payload.append('isShared', (viewMode === 'family').toString()); // Прив'язуємо до режиму
         if (file) payload.append('file', file);
 
         try {
@@ -113,11 +122,11 @@ export default function FinancePage() {
             const fileInput = document.getElementById('file-upload') as HTMLInputElement;
             if (fileInput) fileInput.value = '';
 
-            setPage(1); // Скидаємо на першу сторінку після додавання
+            setPage(1);
             fetchData();
         } catch (error: any) {
             console.error('Помилка збереження', error);
-            setErrorMsg(error.response?.data?.message || 'Не вдалося зберегти транзакцію. Перевірте введені дані.');
+            setErrorMsg(error.response?.data?.message || 'Не вдалося зберегти транзакцію.');
         }
     };
 
@@ -136,38 +145,52 @@ export default function FinancePage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!window.confirm('Ви впевнені, що хочете видалити цей запис?')) return;
-
+        if (!window.confirm('Видалити цей запис?')) return;
         try {
             setErrorMsg(null);
             await api.delete(`/api/finance/${id}`);
             if (editingId === id) cancelEdit();
-
-            // Якщо видалили останній елемент на сторінці - переходимо на попередню
             if (transactions.length === 1 && page > 1) {
                 setPage(p => p - 1);
             } else {
                 fetchData();
             }
         } catch (error: any) {
-            console.error('Помилка видалення', error);
             setErrorMsg(error.response?.data?.message || 'Не вдалося видалити транзакцію.');
         }
     };
 
-    // Скидання сторінки при зміні фільтрів
-    const handleFilterChange = () => {
-        setPage(1);
-    };
+    const handleFilterChange = () => setPage(1);
 
-    if (loading && page === 1) return <div className="min-h-screen flex items-center justify-center bg-gray-50">Завантаження...</div>;
+    if (loading && page === 1 && transactions.length === 0) return <div className="min-h-screen flex items-center justify-center bg-gray-50">Завантаження...</div>;
 
     return (
         <div className="min-h-screen bg-gray-50 p-8">
             <div className="max-w-4xl mx-auto space-y-6">
 
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100 gap-4">
                     <h1 className="text-3xl font-bold text-gray-800">Фінанси</h1>
+
+                    {/* ТУМБЛЕР ГІБРИДНОГО РЕЖИМУ */}
+                    <div className="flex bg-gray-100 p-1 rounded-xl shadow-inner">
+                        <button
+                            onClick={() => { setViewMode('personal'); setPage(1); }}
+                            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${
+                                viewMode === 'personal' ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            👤 Особисті
+                        </button>
+                        <button
+                            onClick={() => { setViewMode('family'); setPage(1); }}
+                            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${
+                                viewMode === 'family' ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            👨‍👩‍👧 Спільні
+                        </button>
+                    </div>
+
                     <Link href="/" className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium">
                         На головну
                     </Link>
@@ -181,15 +204,15 @@ export default function FinancePage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                        <p className="text-sm text-gray-500 mb-1">Загальний дохід</p>
+                        <p className="text-sm text-gray-500 mb-1">Дохід ({viewMode === 'family' ? 'родини' : 'особистий'})</p>
                         <p className="text-2xl font-bold text-green-600">+{summary.totalIncome.toLocaleString()} ₴</p>
                     </div>
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                        <p className="text-sm text-gray-500 mb-1">Загальні витрати</p>
+                        <p className="text-sm text-gray-500 mb-1">Витрати ({viewMode === 'family' ? 'родини' : 'особисті'})</p>
                         <p className="text-2xl font-bold text-red-600">-{summary.totalExpense.toLocaleString()} ₴</p>
                     </div>
                     <div className={`p-4 rounded-xl shadow-sm border ${summary.balance >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                        <p className="text-sm text-gray-700 mb-1">Поточний баланс</p>
+                        <p className="text-sm text-gray-700 mb-1">Баланс</p>
                         <p className={`text-2xl font-bold ${summary.balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                             {summary.balance.toLocaleString()} ₴
                         </p>
@@ -198,8 +221,8 @@ export default function FinancePage() {
 
                 <div className={`bg-white p-6 rounded-xl shadow-md border ${editingId ? 'border-amber-400 ring-2 ring-amber-100' : 'border-gray-100'}`}>
                     <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-semibold text-gray-800">
-                            {editingId ? 'Редагування транзакції' : 'Нова транзакція'}
+                        <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                            {editingId ? '✏️ Редагування' : (viewMode === 'family' ? '➕ Нова спільна транзакція' : '➕ Нова особиста транзакція')}
                         </h2>
                         {editingId && (
                             <button type="button" onClick={cancelEdit} className="text-sm text-gray-500 hover:text-gray-800 font-medium">
@@ -211,7 +234,7 @@ export default function FinancePage() {
                         <div className="flex flex-wrap gap-4 items-end">
                             <div className="flex-1 min-w-[200px]">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Назва</label>
-                                <input type="text" required placeholder="Заправка Mazda 3..." className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-800" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} />
+                                <input type="text" required placeholder={viewMode === 'family' ? "Продукти в Сільпо..." : "Кава..."} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-800" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} />
                             </div>
                             <div className="w-32">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Сума (₴)</label>
@@ -277,7 +300,6 @@ export default function FinancePage() {
                         <button
                             onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
                             className="p-2 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors text-gray-600"
-                            title="Змінити напрямок сортування"
                         >
                             {sortOrder === 'desc' ? '⬇️' : '⬆️'}
                         </button>
@@ -310,10 +332,10 @@ export default function FinancePage() {
                                             {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString()} ₴
                                         </span>
                                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => startEdit(tx)} className="text-amber-500 hover:text-amber-700 font-medium p-2 text-sm bg-amber-50 rounded-lg hover:bg-amber-100" title="Редагувати">
+                                            <button onClick={() => startEdit(tx)} className="text-amber-500 hover:text-amber-700 font-medium p-2 text-sm bg-amber-50 rounded-lg hover:bg-amber-100">
                                                 ✎
                                             </button>
-                                            <button onClick={() => handleDelete(tx._id)} className="text-red-500 hover:text-red-700 font-medium p-2 bg-red-50 rounded-lg hover:bg-red-100" title="Видалити">
+                                            <button onClick={() => handleDelete(tx._id)} className="text-red-500 hover:text-red-700 font-medium p-2 bg-red-50 rounded-lg hover:bg-red-100">
                                                 ✕
                                             </button>
                                         </div>
@@ -324,7 +346,6 @@ export default function FinancePage() {
                     )}
                 </div>
 
-                {/* ПАГІНАЦІЯ */}
                 {meta.totalPages > 1 && (
                     <div className="flex justify-center items-center gap-4 mt-6">
                         <button

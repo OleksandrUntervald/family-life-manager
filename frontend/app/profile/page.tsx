@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Cookies from 'js-cookie'; // <-- Підключаємо Cookies для правильного виходу
+import Cookies from 'js-cookie';
 import { api } from '@/config/api';
 
 export default function ProfilePage() {
@@ -14,20 +14,31 @@ export default function ProfilePage() {
     const [profile, setProfile] = useState({ name: '', email: '' });
     const [passwords, setPasswords] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
 
+    // Стейт для родини
+    const [family, setFamily] = useState<any>(null);
+    const [newFamilyName, setNewFamilyName] = useState('');
+    const [inviteCodeInput, setInviteCodeInput] = useState('');
+
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            const [userRes, familyRes] = await Promise.all([
+                api.get('/api/users/me'),
+                api.get('/api/families/my')
+            ]);
+
+            setProfile({ name: userRes.data.name || '', email: userRes.data.email || '' });
+            setFamily(familyRes.data);
+        } catch (error) {
+            console.error('Не вдалося завантажити дані', error);
+            router.push('/login');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchProfile = async () => {
-            try {
-                // ВИПРАВЛЕНО: Правильний шлях для отримання профілю
-                const res = await api.get('/api/users/me');
-                setProfile({ name: res.data.name || '', email: res.data.email || '' });
-            } catch (error) {
-                console.error('Не вдалося завантажити профіль', error);
-                router.push('/login');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchProfile();
+        fetchData();
     }, [router]);
 
     const showMessage = (type: 'success' | 'error', text: string) => {
@@ -37,13 +48,10 @@ export default function ProfilePage() {
 
     const handleProfileSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        // Перевірка, щоб ім'я не було з одних лише пробілів
         if (!profile.name.trim()) {
             showMessage('error', 'Ім\'я не може бути порожнім! ❌');
             return;
         }
-
         try {
             await api.patch('/api/users/profile', { name: profile.name.trim() });
             showMessage('success', 'Ім\'я профілю успішно оновлено! ✅');
@@ -62,7 +70,6 @@ export default function ProfilePage() {
             showMessage('error', 'Новий пароль має бути не коротшим за 6 символів! ❌');
             return;
         }
-
         try {
             await api.patch('/api/users/password', {
                 oldPassword: passwords.oldPassword,
@@ -70,19 +77,62 @@ export default function ProfilePage() {
             });
             showMessage('success', 'Пароль успішно змінено! Перезайдіть у систему. 🔒');
             setPasswords({ oldPassword: '', newPassword: '', confirmPassword: '' });
-
-            // Після успішної зміни пароля краще розлогінити користувача
             setTimeout(() => handleLogout(), 2000);
-
         } catch (error: any) {
             showMessage('error', error.response?.data?.message || 'Невірний старий пароль або помилка сервера ❌');
         }
     };
 
+    // --- ФУНКЦІЇ ДЛЯ РОДИНИ ---
+
+    const handleCreateFamily = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newFamilyName.trim()) return;
+        try {
+            await api.post('/api/families/create', { name: newFamilyName.trim() });
+            setNewFamilyName('');
+            showMessage('success', 'Родину успішно створено! ✅');
+            fetchData();
+        } catch (error: any) {
+            showMessage('error', error.response?.data?.message || 'Помилка при створенні родини ❌');
+        }
+    };
+
+    const handleJoinFamily = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!inviteCodeInput.trim()) return;
+        try {
+            await api.post('/api/families/join', { inviteCode: inviteCodeInput.trim() });
+            setInviteCodeInput('');
+            showMessage('success', 'Ви успішно приєдналися до родини! ✅');
+            fetchData();
+        } catch (error: any) {
+            showMessage('error', error.response?.data?.message || 'Невірний код або помилка сервера ❌');
+        }
+    };
+
+    const handleLeaveFamily = async () => {
+        if (!window.confirm('Ви впевнені, що хочете покинути цю родину?')) return;
+        try {
+            await api.delete('/api/families/leave');
+            showMessage('success', 'Ви покинули родину.');
+            setFamily(null);
+            fetchData();
+        } catch (error: any) {
+            showMessage('error', 'Помилка при виході з родини ❌');
+        }
+    };
+
+    const copyInviteCode = () => {
+        if (family?.inviteCode) {
+            navigator.clipboard.writeText(family.inviteCode);
+            showMessage('success', 'Код скопійовано в буфер обміну! 📋');
+        }
+    };
+
     const handleLogout = () => {
-        // ВИПРАВЛЕНО: Правильне видалення токена
         Cookies.remove('access_token');
-        localStorage.removeItem('token'); // На всяк випадок чистимо і тут
+        localStorage.removeItem('token');
         router.push('/login');
     };
 
@@ -92,18 +142,15 @@ export default function ProfilePage() {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-zinc-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-6 md:p-10 text-gray-800 dark:text-gray-100 transition-colors duration-300">
-            <div className="max-w-3xl mx-auto space-y-8">
+            <div className="max-w-4xl mx-auto space-y-8">
 
                 <div className="flex justify-between items-center bg-white/70 dark:bg-slate-800/80 backdrop-blur-lg px-6 py-4 rounded-3xl shadow-sm border border-white/50 dark:border-slate-700">
                     <div>
                         <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-700 to-gray-900 dark:from-gray-300 dark:to-gray-100">
                             👤 Налаштування профілю
                         </h1>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Керування обліковим записом та безпекою</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Керування обліковим записом, безпекою та родиною</p>
                     </div>
-                    <Link href="/" className="px-5 py-2 bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-200 border border-gray-200 dark:border-slate-600 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-600 transition-all shadow-sm font-medium text-sm">
-                        Назад
-                    </Link>
                 </div>
 
                 {message && (
@@ -111,6 +158,88 @@ export default function ProfilePage() {
                         {message.text}
                     </div>
                 )}
+
+                {/* --- СЕКЦІЯ РОДИНИ --- */}
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 p-6 md:p-8 rounded-3xl shadow-sm border border-indigo-100 dark:border-indigo-900/50">
+                    <div className="mb-6">
+                        <h2 className="text-xl font-bold text-indigo-900 dark:text-indigo-300">👨‍👩‍👧 Спільний доступ (Родина)</h2>
+                        <p className="text-sm text-indigo-700/70 dark:text-indigo-400 mt-1">Ведіть спільний бюджет та плануйте задачі разом</p>
+                    </div>
+
+                    {family ? (
+                        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-2xl p-6 border border-white/50 dark:border-slate-700">
+                            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
+                                <div>
+                                    <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">Назва родини</p>
+                                    <h3 className="text-2xl font-black text-gray-800 dark:text-gray-100">{family.name}</h3>
+                                </div>
+                                <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-xl border border-indigo-100 dark:border-indigo-800 flex items-center gap-3">
+                                    <div>
+                                        <p className="text-[10px] text-indigo-500 uppercase tracking-wider font-bold">Код запрошення</p>
+                                        <code className="text-lg font-mono font-bold text-indigo-700 dark:text-indigo-400">{family.inviteCode}</code>
+                                    </div>
+                                    <button onClick={copyInviteCode} className="p-2 bg-white dark:bg-slate-700 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors" title="Скопіювати код">
+                                        📋
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="mb-6">
+                                <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-3">Учасники ({family.members?.length || 0})</p>
+                                <div className="flex flex-wrap gap-3">
+                                    {family.members?.map((member: any) => (
+                                        <div key={member._id} className="flex items-center gap-2 bg-gray-50 dark:bg-slate-900 px-4 py-2 rounded-full border border-gray-200 dark:border-slate-700">
+                                            <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white text-xs font-bold">
+                                                {member.name.charAt(0).toUpperCase()}
+                                            </div>
+                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                {member.name} {family.ownerId?._id === member._id && '👑'}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-slate-700">
+                                <button onClick={handleLeaveFamily} className="text-sm font-bold text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors">
+                                    Вийти з родини
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-2xl p-6 border border-white/50 dark:border-slate-700">
+                                <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-2">Створити нову родину</h3>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Ви станете власником групи та отримаєте код для запрошення інших.</p>
+                                <form onSubmit={handleCreateFamily} className="flex gap-2">
+                                    <input
+                                        type="text" required placeholder="Прізвище або назва..."
+                                        className="flex-1 p-3 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-gray-800 dark:text-gray-100"
+                                        value={newFamilyName} onChange={(e) => setNewFamilyName(e.target.value)}
+                                    />
+                                    <button type="submit" className="px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors text-sm shadow-sm">
+                                        Створити
+                                    </button>
+                                </form>
+                            </div>
+
+                            <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-2xl p-6 border border-white/50 dark:border-slate-700">
+                                <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-2">Приєднатися за кодом</h3>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Введіть 8-значний код запрошення, щоб приєднатися до існуючої родини.</p>
+                                <form onSubmit={handleJoinFamily} className="flex gap-2">
+                                    <input
+                                        type="text" required placeholder="XXXX-XXXX"
+                                        className="flex-1 p-3 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-mono text-gray-800 dark:text-gray-100 uppercase"
+                                        value={inviteCodeInput} onChange={(e) => setInviteCodeInput(e.target.value)}
+                                    />
+                                    <button type="submit" className="px-4 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl transition-colors text-sm shadow-sm">
+                                        Вступити
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-3xl shadow-sm border border-white/60 dark:border-slate-700">
