@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/config/api';
-import EquipmentCard, { EquipmentItem } from '@/components/home-tech/EquipmentCard';
+import { EquipmentItem } from '@/types';
+import EquipmentCard from '@/components/home-tech/EquipmentCard';
 
 export default function HomeTechPage() {
-    const router = useRouter();
     const [items, setItems] = useState<EquipmentItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [file, setFile] = useState<File | null>(null);
 
@@ -25,11 +25,11 @@ export default function HomeTechPage() {
     const fetchItems = async () => {
         try {
             setLoading(true);
+            setErrorMsg(null);
             const res = await api.get('/api/home-tech');
             setItems(res.data);
-        } catch (error) {
-            console.error('Помилка завантаження даних', error);
-            router.push('/login');
+        } catch (error: any) {
+            setErrorMsg(error.response?.data?.message || 'Помилка завантаження даних');
         } finally {
             setLoading(false);
         }
@@ -41,9 +41,15 @@ export default function HomeTechPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setErrorMsg(null);
+
+        if (!formData.name.trim()) {
+            setErrorMsg('Назва не може бути порожньою');
+            return;
+        }
 
         const payload = new FormData();
-        payload.append('name', formData.name);
+        payload.append('name', formData.name.trim());
         payload.append('category', formData.category);
         payload.append('lastServiceDate', formData.lastServiceDate);
         payload.append('nextServiceDate', formData.nextServiceDate);
@@ -73,8 +79,9 @@ export default function HomeTechPage() {
             if (fileInput) fileInput.value = '';
 
             fetchItems();
-        } catch (error) {
-            console.error('Помилка збереження запису', error);
+        } catch (error: any) {
+            const msg = error.response?.data?.message;
+            setErrorMsg(Array.isArray(msg) ? msg[0] : msg || 'Помилка збереження запису');
         }
     };
 
@@ -110,8 +117,8 @@ export default function HomeTechPage() {
             await api.delete(`/api/home-tech/${id}`);
             if (editingId === id) cancelEdit();
             fetchItems();
-        } catch (error) {
-            console.error('Помилка видалення', error);
+        } catch (error: any) {
+            setErrorMsg(error.response?.data?.message || 'Помилка видалення запису');
         }
     };
 
@@ -142,6 +149,12 @@ export default function HomeTechPage() {
                         Назад
                     </Link>
                 </div>
+
+                {errorMsg && (
+                    <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-sm font-medium">
+                        ⚠️ {errorMsg}
+                    </div>
+                )}
 
                 <div
                     className={`bg-white/80 backdrop-blur-md p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border ${

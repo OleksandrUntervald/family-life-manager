@@ -1,16 +1,16 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/config/api';
-import WorkoutProgressChart, { Workout } from '@/components/workouts/WorkoutProgressChart';
+import { Workout } from '@/types';
+import WorkoutProgressChart from '@/components/workouts/WorkoutProgressChart';
 import WorkoutHistoryList from '@/components/workouts/WorkoutHistoryList';
 
 export default function WorkoutsPage() {
-    const router = useRouter();
     const [workouts, setWorkouts] = useState<Workout[]>([]);
     const [loading, setLoading] = useState(true);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [selectedChartExercise, setSelectedChartExercise] = useState<string>('');
 
@@ -25,14 +25,15 @@ export default function WorkoutsPage() {
     const fetchWorkouts = useCallback(async () => {
         try {
             setLoading(true);
+            setErrorMsg(null);
             const response = await api.get('/api/workouts');
             setWorkouts(response.data);
-        } catch (error) {
-            router.push('/login');
+        } catch (error: any) {
+            setErrorMsg(error.response?.data?.message || 'Помилка завантаження тренувань');
         } finally {
             setLoading(false);
         }
-    }, [router]);
+    }, []);
 
     useEffect(() => {
         setFormData((prev) => ({ ...prev, date: new Date().toISOString().split('T')[0] }));
@@ -41,6 +42,13 @@ export default function WorkoutsPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setErrorMsg(null);
+
+        if (!formData.title.trim()) {
+            setErrorMsg('Назва вправи не може бути порожньою');
+            return;
+        }
+
         const payload = {
             title: formData.title.trim(),
             weight: Number(formData.weight),
@@ -64,8 +72,9 @@ export default function WorkoutsPage() {
                 date: new Date().toISOString().split('T')[0],
             });
             fetchWorkouts();
-        } catch (error) {
-            console.error('Помилка збереження', error);
+        } catch (error: any) {
+            const msg = error.response?.data?.message;
+            setErrorMsg(Array.isArray(msg) ? msg[0] : msg || 'Помилка збереження підходу');
         }
     };
 
@@ -100,8 +109,8 @@ export default function WorkoutsPage() {
             await api.delete(`/api/workouts/${id}`);
             if (editingId === id) cancelEdit();
             fetchWorkouts();
-        } catch (error) {
-            console.error('Помилка видалення', error);
+        } catch (error: any) {
+            setErrorMsg(error.response?.data?.message || 'Помилка видалення');
         }
     };
 
@@ -154,6 +163,12 @@ export default function WorkoutsPage() {
                         Назад
                     </Link>
                 </div>
+
+                {errorMsg && (
+                    <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-sm font-medium">
+                        ⚠️ {errorMsg}
+                    </div>
+                )}
 
                 <WorkoutProgressChart
                     uniqueExercises={uniqueExercises}

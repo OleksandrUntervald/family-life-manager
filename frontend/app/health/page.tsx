@@ -1,42 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/config/api';
+import { DailyStats } from '@/types';
 import BodySettingsForm from '@/components/health/BodySettingsForm';
 import HealthMetricsCards from '@/components/health/HealthMetricsCards';
 
-interface DailyStats {
-    record: {
-        date: string;
-        consumedCalories: number;
-        steps: number;
-        weight: number;
-        water: number;
-    };
-    userParams: {
-        height: number;
-        age: number;
-        gender: string;
-        targetWeight: number;
-    };
-    stats: {
-        currentWeight: number;
-        bmr: number;
-        burnedFromSteps: number;
-        dynamicCalorieGoal: number;
-        caloriesLeft: number;
-        water: number;
-    };
-}
-
 export default function HealthPage() {
-    const router = useRouter();
-
     const [selectedDate, setSelectedDate] = useState('');
     const [data, setData] = useState<DailyStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     const [formData, setFormData] = useState({
         consumedCalories: '',
@@ -62,6 +37,7 @@ export default function HealthPage() {
         if (!date) return;
         try {
             setLoading(true);
+            setErrorMsg(null);
             const res = await api.get(`/api/health/stats/${date}`);
             setData(res.data);
             setFormData({
@@ -75,9 +51,8 @@ export default function HealthPage() {
             if (res.data.userParams) {
                 setUserParams(res.data.userParams);
             }
-        } catch (error) {
-            console.error('Помилка завантаження статистики', error);
-            router.push('/login');
+        } catch (error: any) {
+            setErrorMsg(error.response?.data?.message || 'Не вдалося завантажити статистику');
         } finally {
             setLoading(false);
         }
@@ -90,6 +65,7 @@ export default function HealthPage() {
     const handleDailySubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            setErrorMsg(null);
             const safeWeight =
                 formData.weight === ''
                     ? data?.record?.weight || data?.stats?.currentWeight || 0
@@ -106,14 +82,16 @@ export default function HealthPage() {
                 water: formData.water === '' ? data?.record?.water || 0 : Number(formData.water),
             });
             fetchStats(selectedDate);
-        } catch (error) {
-            console.error('Помилка збереження', error);
+        } catch (error: any) {
+            const msg = error.response?.data?.message;
+            setErrorMsg(Array.isArray(msg) ? msg[0] : msg || 'Помилка збереження показників');
         }
     };
 
     const handleSettingsSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            setErrorMsg(null);
             await api.patch('/api/users/settings', {
                 height: Number(userParams.height),
                 age: Number(userParams.age),
@@ -122,8 +100,9 @@ export default function HealthPage() {
             });
             setShowSettings(false);
             fetchStats(selectedDate);
-        } catch (error) {
-            console.error('Помилка збереження налаштувань', error);
+        } catch (error: any) {
+            const msg = error.response?.data?.message;
+            setErrorMsg(Array.isArray(msg) ? msg[0] : msg || 'Помилка збереження налаштувань');
         }
     };
 
@@ -190,6 +169,12 @@ export default function HealthPage() {
                     </div>
                 </div>
 
+                {errorMsg && (
+                    <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-sm font-medium">
+                        ⚠️ {errorMsg}
+                    </div>
+                )}
+
                 {showSettings && (
                     <BodySettingsForm
                         userParams={userParams}
@@ -216,11 +201,7 @@ export default function HealthPage() {
                     </div>
                 </div>
 
-                <HealthMetricsCards
-                    stats={data?.stats}
-                    formData={formData}
-                    onAddWater={addWater}
-                />
+                <HealthMetricsCards stats={data?.stats} formData={formData} onAddWater={addWater} />
 
                 <div className="bg-white/80 backdrop-blur-md p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/60">
                     <h3 className="text-lg font-bold text-gray-800 mb-4">

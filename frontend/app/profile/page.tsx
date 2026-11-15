@@ -12,12 +12,13 @@ export default function ProfilePage() {
     const [loading, setLoading] = useState(true);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-    const [profile, setProfile] = useState({ name: '', email: '' });
+    const [profile, setProfile] = useState({ name: '', email: '', role: 'user' });
     const [passwords, setPasswords] = useState({
         oldPassword: '',
         newPassword: '',
         confirmPassword: '',
     });
+    const [premiumKey, setPremiumKey] = useState('');
 
     const [family, setFamily] = useState<any>(null);
     const [newFamilyName, setNewFamilyName] = useState('');
@@ -31,11 +32,14 @@ export default function ProfilePage() {
                 api.get('/api/families/my'),
             ]);
 
-            setProfile({ name: userRes.data.name || '', email: userRes.data.email || '' });
+            setProfile({
+                name: userRes.data.name || '',
+                email: userRes.data.email || '',
+                role: userRes.data.role || 'user',
+            });
             setFamily(familyRes.data);
         } catch (error) {
-            console.error('Не вдалося завантажити дані', error);
-            router.push('/login');
+            showMessage('error', 'Не вдалося завантажити дані профілю');
         } finally {
             setLoading(false);
         }
@@ -43,7 +47,7 @@ export default function ProfilePage() {
 
     useEffect(() => {
         fetchData();
-    }, [router]);
+    }, []);
 
     const showMessage = (type: 'success' | 'error', text: string) => {
         setMessage({ type, text });
@@ -60,7 +64,22 @@ export default function ProfilePage() {
             await api.patch('/api/users/profile', { name: profile.name.trim() });
             showMessage('success', "Ім'я профілю успішно оновлено! ✅");
         } catch (error: any) {
-            showMessage('error', error.response?.data?.message || 'Не вдалося оновити профіль ❌');
+            const msg = error.response?.data?.message;
+            showMessage('error', Array.isArray(msg) ? msg[0] : msg || 'Не вдалося оновити профіль ❌');
+        }
+    };
+
+    const handleActivateKey = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!premiumKey.trim()) return;
+        try {
+            const res = await api.post('/api/users/activate-key', { key: premiumKey.trim() });
+            setPremiumKey('');
+            showMessage('success', res.data?.message || 'Premium активовано! 👑');
+            fetchData();
+        } catch (error: any) {
+            const msg = error.response?.data?.message;
+            showMessage('error', Array.isArray(msg) ? msg[0] : msg || 'Недійсний ключ активації ❌');
         }
     };
 
@@ -81,11 +100,12 @@ export default function ProfilePage() {
             });
             showMessage('success', 'Пароль успішно змінено! Перезайдіть у систему. 🔒');
             setPasswords({ oldPassword: '', newPassword: '', confirmPassword: '' });
-            setTimeout(() => handleLogout(), 2000);
+            setTimeout(() => handleLogout(), 1500);
         } catch (error: any) {
+            const msg = error.response?.data?.message;
             showMessage(
                 'error',
-                error.response?.data?.message || 'Невірний старий пароль або помилка сервера ❌'
+                Array.isArray(msg) ? msg[0] : msg || 'Невірний старий пароль або помилка сервера ❌'
             );
         }
     };
@@ -99,7 +119,8 @@ export default function ProfilePage() {
             showMessage('success', 'Родину успішно створено! ✅');
             fetchData();
         } catch (error: any) {
-            showMessage('error', error.response?.data?.message || 'Помилка при створенні родини ❌');
+            const msg = error.response?.data?.message;
+            showMessage('error', Array.isArray(msg) ? msg[0] : msg || 'Помилка при створенні родини ❌');
         }
     };
 
@@ -112,7 +133,8 @@ export default function ProfilePage() {
             showMessage('success', 'Ви успішно приєдналися до родини! ✅');
             fetchData();
         } catch (error: any) {
-            showMessage('error', error.response?.data?.message || 'Невірний код або помилка сервера ❌');
+            const msg = error.response?.data?.message;
+            showMessage('error', Array.isArray(msg) ? msg[0] : msg || 'Невірний код запрошення ❌');
         }
     };
 
@@ -152,11 +174,16 @@ export default function ProfilePage() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-zinc-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-4 sm:p-6 md:p-10 text-gray-800 dark:text-gray-100 transition-colors duration-300">
             <div className="max-w-4xl mx-auto space-y-8">
-                <div className="flex justify-between items-center bg-white/70 dark:bg-slate-800/80 backdrop-blur-lg px-6 py-4 rounded-3xl shadow-sm border border-white/50 dark:border-slate-700">
+                <div className="flex justify-between items-center bg-white/70 dark:bg-slate-800/80 backdrop-blur-lg px-6 py-4 rounded-3xl shadow-sm border border-white/50 dark:border-slate-700 flex-wrap gap-3">
                     <div>
-                        <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-700 to-gray-900 dark:from-gray-300 dark:to-gray-100">
-                            👤 Налаштування профілю
-                        </h1>
+                        <div className="flex items-center gap-2.5">
+                            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-700 to-gray-900 dark:from-gray-300 dark:to-gray-100">
+                                👤 Налаштування профілю
+                            </h1>
+                            <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 text-xs font-extrabold rounded-full uppercase">
+                {profile.role}
+              </span>
+                        </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                             Керування обліковим записом, безпекою та родиною
                         </p>
@@ -192,6 +219,34 @@ export default function ProfilePage() {
                     onLeaveFamily={handleLeaveFamily}
                     onCopyInviteCode={copyInviteCode}
                 />
+
+                {/* Секція активації ліцензійного ключа Premium */}
+                <div className="bg-amber-50/80 dark:bg-amber-900/20 p-6 rounded-3xl border border-amber-200 dark:border-amber-800/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h2 className="text-lg font-bold text-amber-900 dark:text-amber-300">
+                            👑 Активація ключа Premium
+                        </h2>
+                        <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                            Введіть 16-значний ключ активації, отриманий від адміністратора
+                        </p>
+                    </div>
+                    <form onSubmit={handleActivateKey} className="flex gap-2 w-full md:w-auto">
+                        <input
+                            type="text"
+                            required
+                            placeholder="XXXX-XXXX-XXXX-XXXX"
+                            value={premiumKey}
+                            onChange={(e) => setPremiumKey(e.target.value)}
+                            className="flex-1 md:w-60 p-3 bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-xl font-mono text-sm uppercase outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                        <button
+                            type="submit"
+                            className="px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-sm text-sm transition-all cursor-pointer shrink-0"
+                        >
+                            Активувати
+                        </button>
+                    </form>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-3xl shadow-sm border border-white/60 dark:border-slate-700">
