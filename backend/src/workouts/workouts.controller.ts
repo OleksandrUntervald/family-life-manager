@@ -1,34 +1,52 @@
-import {Controller, Get, Post, Body, Param, Delete, UseGuards, Request, Patch} from '@nestjs/common';
+import {
+    Controller,
+    Get,
+    Post,
+    Body,
+    Param,
+    Delete,
+    UseGuards,
+    Patch,
+} from '@nestjs/common';
 import { WorkoutsService } from './workouts.service.js';
 import { CreateWorkoutDto } from './dto/create-workout.dto.js';
+import { UpdateWorkoutDto } from './dto/update-workout.dto.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { GetUser } from '../common/decorators/get-user.decorator.js';
+import { ParseObjectIdPipe } from '../common/pipes/parse-object-id.pipe.js';
 
-@UseGuards(JwtAuthGuard) // Захищаємо всі маршрути одразу
-@Controller('workouts') // Базовий шлях: /api/workouts
+@UseGuards(JwtAuthGuard)
+@Controller('workouts')
 export class WorkoutsController {
     constructor(private readonly workoutsService: WorkoutsService) {}
 
     @Post()
-    create(@Request() req: any, @Body() dto: CreateWorkoutDto) {
-        // req.user.id береться з токена завдяки JwtAuthGuard
-        return this.workoutsService.create(req.user.id, dto);
+    create(
+        @GetUser() user: { id: string },
+        @Body() dto: CreateWorkoutDto,
+    ) {
+        return this.workoutsService.create(user.id, dto);
     }
 
     @Get()
-    findAll(@Request() req: any) {
-        return this.workoutsService.findAll(req.user.id);
+    findAll(@GetUser() user: { id: string }) {
+        return this.workoutsService.findAll(user.id);
     }
 
     @Delete(':id')
-    remove(@Request() req: any, @Param('id') id: string) {
-        return this.workoutsService.remove(id, req.user.id);
+    remove(
+        @GetUser() user: { id: string },
+        @Param('id', ParseObjectIdPipe) id: string,
+    ) {
+        return this.workoutsService.remove(id, user.id);
     }
+
     @Patch(':id')
     updateWorkout(
-        @Request() req: any,
-        @Param('id') id: string,
-        @Body() body: any
+        @GetUser() user: { id: string },
+        @Param('id', ParseObjectIdPipe) id: string,
+        @Body() dto: UpdateWorkoutDto,
     ) {
-        return this.workoutsService.updateWorkout(req.user.id, id, body);
+        return this.workoutsService.updateWorkout(user.id, id, dto);
     }
 }

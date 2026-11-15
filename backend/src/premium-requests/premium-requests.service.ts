@@ -1,26 +1,36 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import {
+    Injectable,
+    ForbiddenException,
+    NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
-import { PremiumRequest, RequestStatus } from './schemas/premium-request.schema.js';
+import {
+    PremiumRequest,
+    RequestStatus,
+} from './schemas/premium-request.schema.js';
 import { UsersService } from '../users/users.service.js';
 import { UserRole } from '../users/schemas/user.schema.js';
+import { UpdatePremiumRequestDto } from './dto/update-premium-request.dto.js';
 
 @Injectable()
 export class PremiumRequestsService {
     constructor(
-        @InjectModel(PremiumRequest.name) private requestModel: Model<PremiumRequest>,
+        @InjectModel(PremiumRequest.name)
+        private requestModel: Model<PremiumRequest>,
         private usersService: UsersService,
         private configService: ConfigService,
     ) {}
 
-    private async notifyTelegram(reqData: any, userEmail: string) {
-        const token = this.configService.get('TELEGRAM_BOT_TOKEN');
-        const chatId = this.configService.get('TELEGRAM_CHAT_ID');
+    private async notifyTelegram(reqData: PremiumRequest, userEmail: string) {
+        const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
+        const chatId = this.configService.get<string>('TELEGRAM_CHAT_ID');
 
         if (!token || !chatId || chatId === 'ВСТАВ_СЮДИ_СВІЙ_ID') return;
 
-        const text = `🔥 <b>Нова заявка на Premium!</b>\n\n` +
+        const text =
+            `🔥 <b>Нова заявка на Premium!</b>\n\n` +
             `👤 <b>Від:</b> ${reqData.name} (${userEmail})\n` +
             `✈️ <b>Telegram:</b> ${reqData.telegram}\n` +
             `📦 <b>Пакет:</b> ${reqData.plan}\n` +
@@ -34,21 +44,26 @@ export class PremiumRequestsService {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     chat_id: chatId,
-                    text: text,
-                    parse_mode: 'HTML'
-                })
+                    text,
+                    parse_mode: 'HTML',
+                }),
             });
         } catch (err) {
             console.error('Помилка відправки в Telegram:', err);
         }
     }
 
-    async createRequest(userId: string, telegram: string, plan = 'Family Premium PRO', comment = '') {
+    async createRequest(
+        userId: string,
+        telegram: string,
+        plan = 'Family Premium PRO',
+        comment = '',
+    ) {
         const user = await this.usersService.findById(userId);
         const newReq = new this.requestModel({
             userId,
-            name: user ? user.name : 'Користувач',
-            email: user ? user.email : 'unknown@gmail.com',
+            name: user.name,
+            email: user.email,
             telegram,
             plan,
             billingFormat: plan.includes('Annual') ? 'annual' : 'monthly',
@@ -59,14 +74,18 @@ export class PremiumRequestsService {
         });
 
         const savedReq = await newReq.save();
-
-        this.notifyTelegram(savedReq, user ? user.email : 'unknown').catch(console.error);
+        this.notifyTelegram(savedReq, user.email).catch(console.error);
 
         return savedReq;
     }
 
-    async findAllPaginated(page = 1, limit = 25, status?: string, search?: string) {
-        const query: any = {};
+    async findAllPaginated(
+        page = 1,
+        limit = 25,
+        status?: string,
+        search?: string,
+    ) {
+        const query: Record<string, any> = {};
         if (status && status !== 'all') {
             query.status = status;
         }
@@ -95,39 +114,49 @@ export class PremiumRequestsService {
             total,
             page: Number(page),
             limit: Number(limit),
-            totalPages: Math.ceil(total / limit),
+            totalPages: Math.ceil(total / limit) || 1,
         };
     }
 
-    // ВИПРАВЛЕНО: Додано userId того, хто схвалює (редагує) заявку
-    async updateRequest(id: string, updateData: any, managerName: string, managerId: string) {
-        // Знаходимо оригінальну заявку, щоб перевірити, чия вона
+    async updateRequest(
+        id: string,
+        updateData: UpdatePremiumRequestDto,
+        managerId: string,
+    ) {
         const originalRequest = await this.requestModel.findById(id).exec();
         if (!originalRequest) {
-            throw new Error('Заявку не знайдено');
+            throw new NotFoundException('Заявку не знайдено');
         }
 
-        // 1. Блокуємо схвалення/редагування власної заявки (якщо ти менеджер/адмін, ти не можеш схвалити свою ж заявку)
-        if (originalRequest.userId && originalRequest.userId.toString() === managerId) {
-            throw new ForbiddenException('Ви не можете редагувати або схвалювати власну заявку');
+        if (
+            originalRequest.userId &&
+            originalRequest.userId.toString() === managerId
+        ) {
+            throw new ForbiddenException(
+                'Ви не можете редагувати або схвалювати власну заявку',
+            );
         }
 
-        const updated = await this.requestModel.findByIdAndUpdate(
-            id,
-            { ...updateData, manager: managerName },
-            { new: true },
-        ).exec();
+        const managerUser = await this.usersService.findById(managerId);
 
-        // 2. Якщо заявку схвалили
+        const updated = await this.requestModel
+            .findByIdAndUpdate(
+                id,
+                { $set: { ...updateData, manager: managerUser.name } },
+                { new: true, runValidators: true },
+            )
+            .exec();
+
         if (updated && updated.status === RequestStatus.AGREE && updated.userId) {
-            const targetUser = await this.usersService.findById(updated.userId.toString());
+            const targetUser = await this.usersService.findById(
+                updated.userId.toString(),
+            );
 
-            if (targetUser) {
-                // Блокуємо пониження прав: якщо юзер вже Адмін чи Менеджер, ми не даємо йому статус Premium,
-                // щоб він не втратив свої вищі права доступу до адмінки.
-                if (targetUser.role === UserRole.USER) {
-                    await this.usersService.updateUserRole(updated.userId.toString(), UserRole.PREMIUM);
-                }
+            if (targetUser && targetUser.role === UserRole.USER) {
+                await this.usersService.updateUserRole(
+                    updated.userId.toString(),
+                    UserRole.PREMIUM,
+                );
             }
         }
 
@@ -140,11 +169,23 @@ export class PremiumRequestsService {
             return { message: 'База вже наповнена заявками', total: count };
         }
 
-        const names = ['Олександр', 'Марія', 'Дмитро', 'Анна', 'Іван', 'Олена', 'Максим', 'Тетяна', 'Артем', 'Юлія', 'Богдан', 'Софія', 'Денис', 'Катерина', 'Андрій'];
-        const surnames = ['Коваленко', 'Шевченко', 'Бондаренко', 'Ткаченко', 'Кравченко', 'Олійник', 'Лисенко', 'Марченко', 'Савченко', 'Руденко', 'Мороз', 'Петренко'];
+        const names = [
+            'Олександр', 'Марія', 'Дмитро', 'Анна', 'Іван', 'Олена',
+            'Максим', 'Тетяна', 'Артем', 'Юлія', 'Богдан', 'Софія',
+        ];
+        const surnames = [
+            'Коваленко', 'Шевченко', 'Бондаренко', 'Ткаченко', 'Кравченко',
+            'Олійник', 'Лисенко', 'Марченко', 'Савченко', 'Руденко',
+        ];
         const plans = ['Family Premium PRO', 'Personal VIP', 'Family Minimal', 'Team Ultra'];
         const formats = ['annual', 'monthly'];
-        const statuses = [RequestStatus.NEW, RequestStatus.IN_WORK, RequestStatus.AGREE, RequestStatus.DISAGREE, RequestStatus.DUBBING];
+        const statuses = [
+            RequestStatus.NEW,
+            RequestStatus.IN_WORK,
+            RequestStatus.AGREE,
+            RequestStatus.DISAGREE,
+            RequestStatus.DUBBING,
+        ];
         const managers = [null, 'Super Admin', 'Manager_Oleg', 'Manager_Anna'];
 
         const mockRequests = [];
@@ -155,7 +196,12 @@ export class PremiumRequestsService {
             const plan = plans[Math.floor(Math.random() * plans.length)];
             const status = statuses[Math.floor(Math.random() * statuses.length)];
             const sum = plan.includes('VIP') || plan.includes('Ultra') ? 199 : 99;
-            const alreadyPaid = status === RequestStatus.AGREE ? sum : (status === RequestStatus.IN_WORK ? 50 : 0);
+            const alreadyPaid =
+                status === RequestStatus.AGREE
+                    ? sum
+                    : status === RequestStatus.IN_WORK
+                        ? 50
+                        : 0;
 
             mockRequests.push({
                 name: `${firstName} ${lastName}`,
@@ -166,13 +212,22 @@ export class PremiumRequestsService {
                 status,
                 sum,
                 alreadyPaid,
-                manager: status === RequestStatus.NEW ? null : managers[Math.floor(Math.random() * managers.length)],
-                comment: i % 4 === 0 ? 'Хочу підключити сімейний бюджет та Telegram-сповіщення' : '',
-                createdAt: new Date(Date.now() - (105 - i) * 3600 * 1000 * 6), // Виправлений формат
+                manager:
+                    status === RequestStatus.NEW
+                        ? null
+                        : managers[Math.floor(Math.random() * managers.length)],
+                comment:
+                    i % 4 === 0
+                        ? 'Хочу підключити сімейний бюджет та Telegram-сповіщення'
+                        : '',
+                createdAt: new Date(Date.now() - (105 - i) * 3600 * 1000 * 6),
             });
         }
 
         await this.requestModel.insertMany(mockRequests);
-        return { message: 'Успішно згенеровано 105 тестових заявок!', total: await this.requestModel.countDocuments() };
+        return {
+            message: 'Успішно згенеровано 105 тестових заявок!',
+            total: await this.requestModel.countDocuments(),
+        };
     }
 }

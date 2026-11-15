@@ -1,8 +1,20 @@
-import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards, Request, BadRequestException, Query } from '@nestjs/common';
-import { Types } from 'mongoose';
+import {
+    Controller,
+    Get,
+    Post,
+    Body,
+    Param,
+    Patch,
+    Delete,
+    UseGuards,
+    Query,
+} from '@nestjs/common';
 import { TasksService } from './tasks.service.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
+import { UpdateTaskDto } from './dto/update-task.dto.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { GetUser } from '../common/decorators/get-user.decorator.js';
+import { ParseObjectIdPipe } from '../common/pipes/parse-object-id.pipe.js';
 
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
@@ -10,29 +22,35 @@ export class TasksController {
     constructor(private readonly tasksService: TasksService) {}
 
     @Post()
-    create(@Request() req: any, @Body() dto: CreateTaskDto) {
-        return this.tasksService.create(req.user.id, dto);
+    create(
+        @GetUser() user: { id: string },
+        @Body() dto: CreateTaskDto,
+    ) {
+        return this.tasksService.create(user.id, dto);
     }
 
     @Get()
-    findAll(@Request() req: any, @Query('isShared') isShared: string) {
-        const isSharedBool = isShared === 'true';
-        return this.tasksService.findAll(req.user.id, isSharedBool);
+    findAll(
+        @GetUser() user: { id: string },
+        @Query('isShared') isShared?: string,
+    ) {
+        return this.tasksService.findAll(user.id, isShared === 'true');
     }
 
     @Delete(':id')
-    remove(@Request() req: any, @Param('id') id: string) {
-        if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Некоректний ID');
-        return this.tasksService.remove(id, req.user.id);
+    remove(
+        @GetUser() user: { id: string },
+        @Param('id', ParseObjectIdPipe) id: string,
+    ) {
+        return this.tasksService.remove(id, user.id);
     }
 
     @Patch(':id/edit')
     updateTask(
-        @Request() req: any,
-        @Param('id') id: string,
-        @Body() body: any
+        @GetUser() user: { id: string },
+        @Param('id', ParseObjectIdPipe) id: string,
+        @Body() dto: UpdateTaskDto,
     ) {
-        if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Некоректний ID');
-        return this.tasksService.updateTask(req.user.id, id, body);
+        return this.tasksService.updateTask(user.id, id, dto);
     }
 }

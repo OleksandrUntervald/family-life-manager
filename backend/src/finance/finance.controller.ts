@@ -1,89 +1,87 @@
-import { Controller, Get, Post, Body, Param, Delete, UseGuards, Request, Patch, UseInterceptors, UploadedFile, BadRequestException, Query } from '@nestjs/common';
+import {
+    Controller,
+    Get,
+    Post,
+    Body,
+    Param,
+    Delete,
+    UseGuards,
+    Patch,
+    UseInterceptors,
+    UploadedFile,
+    Query,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Types } from 'mongoose';
 import { FinanceService } from './finance.service.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
-import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
+import { GetUser } from '../common/decorators/get-user.decorator.js';
+import { ParseObjectIdPipe } from '../common/pipes/parse-object-id.pipe.js';
+import type { UploadedFileType } from '../common/interfaces/uploaded-file.interface.js';
+import { CreateTransactionDto } from './dto/create-transaction.dto.js';
+import { UpdateTransactionDto } from './dto/update-transaction.dto.js';
 
 @UseGuards(JwtAuthGuard)
 @Controller('finance')
 export class FinanceController {
-    constructor(
-        private readonly financeService: FinanceService,
-        private readonly cloudinaryService: CloudinaryService
-    ) {}
+    constructor(private readonly financeService: FinanceService) {}
 
     @Post()
     @UseInterceptors(FileInterceptor('file'))
-    async create(@Request() req: any, @Body() dto: any, @UploadedFile() file: any) {
-        let receiptUrl = '';
-        if (file) receiptUrl = await this.cloudinaryService.uploadFile(file, 'lifemanager_finance');
-
-        // FormData передає boolean як строку
-        const isShared = dto.isShared === 'true' || dto.isShared === true;
-
-        const transactionData = { ...dto, amount: Number(dto.amount), isShared };
-        if (receiptUrl) transactionData.receiptUrl = receiptUrl;
-
-        return this.financeService.create(req.user.id, transactionData);
+    async create(
+        @GetUser() user: { id: string },
+        @Body() dto: CreateTransactionDto,
+        @UploadedFile() file?: UploadedFileType,
+    ) {
+        return this.financeService.create(user.id, dto, file);
     }
 
     @Get('summary')
-    getSummary(@Request() req: any, @Query('isShared') isShared?: string) {
-        const isSharedBool = isShared === 'true';
-        return this.financeService.getSummary(req.user.id, isSharedBool);
+    getSummary(
+        @GetUser() user: { id: string },
+        @Query('isShared') isShared?: string,
+    ) {
+        return this.financeService.getSummary(user.id, isShared === 'true');
     }
 
     @Get()
     findAll(
-        @Request() req: any,
+        @GetUser() user: { id: string },
         @Query('page') page?: string,
         @Query('limit') limit?: string,
         @Query('sortBy') sortBy?: string,
         @Query('sortOrder') sortOrder?: 'asc' | 'desc',
         @Query('type') type?: string,
         @Query('category') category?: string,
-        @Query('isShared') isShared?: string
+        @Query('isShared') isShared?: string,
     ) {
         return this.financeService.findAll(
-            req.user.id,
-            page ? parseInt(page) : 1,
-            limit ? parseInt(limit) : 10,
+            user.id,
+            page ? parseInt(page, 10) : 1,
+            limit ? parseInt(limit, 10) : 10,
             sortBy || 'createdAt',
             sortOrder || 'desc',
             type,
             category,
-            isShared === 'true'
+            isShared === 'true',
         );
     }
 
     @Delete(':id')
-    remove(@Request() req: any, @Param('id') id: string) {
-        if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Некоректний ID');
-        return this.financeService.remove(id, req.user.id);
+    remove(
+        @GetUser() user: { id: string },
+        @Param('id', ParseObjectIdPipe) id: string,
+    ) {
+        return this.financeService.remove(id, user.id);
     }
 
     @Patch(':id')
     @UseInterceptors(FileInterceptor('file'))
     async update(
-        @Request() req: any,
-        @Param('id') id: string,
-        @Body() body: any,
-        @UploadedFile() file: any
+        @GetUser() user: { id: string },
+        @Param('id', ParseObjectIdPipe) id: string,
+        @Body() dto: UpdateTransactionDto,
+        @UploadedFile() file?: UploadedFileType,
     ) {
-        if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Некоректний ID');
-
-        const updateData = { ...body };
-        delete updateData.userId;
-        delete updateData.familyId;
-        delete updateData.isShared;
-
-        if (updateData.amount) updateData.amount = Number(updateData.amount);
-
-        if (file) {
-            updateData.receiptUrl = await this.cloudinaryService.uploadFile(file, 'lifemanager_finance');
-        }
-
-        return this.financeService.updateTransaction(req.user.id, id, updateData);
+        return this.financeService.updateTransaction(user.id, id, dto, file);
     }
 }

@@ -12,32 +12,28 @@ function AdminContent() {
 
     const [activeTab, setActiveTab] = useState<'users' | 'analytics'>('users');
     const [users, setUsers] = useState<any[]>([]);
+    const [currentUserId, setCurrentUserId] = useState<string>('');
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [activationToken, setActivationToken] = useState<string | null>(null);
-
-    const fetchUsers = async () => {
-        try {
-            const res = await api.get('/api/users/admin/all');
-            setUsers(res.data);
-        } catch (error) {
-            router.push('/');
-        }
-    };
-
-    const fetchStats = async () => {
-        try {
-            const res = await api.get('/api/users/admin/stats');
-            setStats(res.data);
-        } catch (error) {
-            console.error(error);
-        }
-    };
 
     const loadData = async () => {
         setLoading(true);
-        await Promise.all([fetchUsers(), fetchStats()]);
-        setLoading(false);
+        try {
+            const [meRes, usersRes, statsRes] = await Promise.all([
+                api.get('/api/users/me'),
+                api.get('/api/users/admin/all'),
+                api.get('/api/users/admin/stats'),
+            ]);
+            setCurrentUserId(meRes.data?._id || meRes.data?.id || '');
+            setUsers(usersRes.data);
+            setStats(statsRes.data);
+        } catch (error) {
+            router.push('/');
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -45,23 +41,36 @@ function AdminContent() {
     }, []);
 
     const handleRoleChange = async (userId: string, newRole: string) => {
-        await api.patch(`/api/users/admin/${userId}/role`, { role: newRole });
-        loadData();
+        setErrorMsg(null);
+        try {
+            await api.patch(`/api/users/admin/${userId}/role`, { role: newRole });
+            await loadData();
+        } catch (err: any) {
+            const msg = err.response?.data?.message;
+            setErrorMsg(Array.isArray(msg) ? msg[0] : msg || 'Не вдалося змінити роль');
+        }
     };
 
     const handleToggleBan = async (userId: string) => {
-        await api.patch(`/api/users/admin/${userId}/ban`);
-        loadData();
+        setErrorMsg(null);
+        try {
+            await api.patch(`/api/users/admin/${userId}/ban`);
+            await loadData();
+        } catch (err: any) {
+            const msg = err.response?.data?.message;
+            setErrorMsg(Array.isArray(msg) ? msg[0] : msg || 'Не вдалося змінити статус блокування');
+        }
     };
 
-    const generateToken = () => {
-        const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        let token = '';
-        for (let i = 0; i < 16; i++) {
-            if (i > 0 && i % 4 === 0) token += '-';
-            token += charset.charAt(Math.floor(Math.random() * charset.length));
+    const generateToken = async () => {
+        setErrorMsg(null);
+        try {
+            const res = await api.post('/api/users/admin/generate-key');
+            setActivationToken(res.data.token);
+        } catch (err: any) {
+            const msg = err.response?.data?.message;
+            setErrorMsg(Array.isArray(msg) ? msg[0] : msg || 'Лише ADMIN може генерувати ключі');
         }
-        setActivationToken(token);
     };
 
     if (loading) {
@@ -90,6 +99,12 @@ function AdminContent() {
                         ← На Дашборд
                     </Link>
                 </header>
+
+                {errorMsg && (
+                    <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-bold">
+                        ⚠️ {errorMsg}
+                    </div>
+                )}
 
                 <div className="flex flex-wrap gap-3 mb-6">
                     <button
@@ -123,6 +138,7 @@ function AdminContent() {
                 ) : (
                     <AdminUsersTable
                         users={users}
+                        currentUserId={currentUserId}
                         onRoleChange={handleRoleChange}
                         onToggleBan={handleToggleBan}
                     />

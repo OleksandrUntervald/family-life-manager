@@ -1,23 +1,27 @@
-import { IsEnum, IsNotEmpty, IsNumber, IsString, Min, IsOptional } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { TransactionType } from '../schemas/transaction.schema.js';
 
 export class CreateTransactionDto {
     @IsString()
-    @IsNotEmpty({ message: 'Назва не може бути порожньою' })
+    @IsNotEmpty({ message: 'Назва транзакції обов’язкова' })
+    @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
     title: string;
 
+    @Type(() => Number)
     @IsNumber({}, { message: 'Сума має бути числом' })
-    @Min(0.01, { message: 'Сума має бути більше нуля' })
+    @Min(0.01, { message: 'Сума має бути більшою за 0' })
     amount: number;
 
-    @IsEnum(TransactionType, { message: 'Тип має бути income або expense' })
+    @IsEnum(TransactionType, { message: 'Некоректний тип транзакції (income або expense)' })
     type: TransactionType;
 
     @IsString()
-    @IsNotEmpty({ message: 'Категорія обовʼязкова' })
+    @IsNotEmpty({ message: 'Категорія обов’язкова' })
+    @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
     category: string;
 
-    // ДОДАНО: Прапорець сімейної транзакції
     @IsOptional()
-    isShared?: string | boolean;
+    @Transform(({ value }) => value === 'true' || value === true)
+    isShared?: boolean;
 }

@@ -1,8 +1,17 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Get, UseGuards, Request } from '@nestjs/common';
+import {
+    Controller,
+    Post,
+    Body,
+    HttpCode,
+    HttpStatus,
+    Get,
+    UseGuards,
+} from '@nestjs/common';
 import { AuthService } from './auth.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
-import { JwtAuthGuard } from './jwt-auth.guard.js'; // <-- Імпортуємо Guard
+import { JwtAuthGuard } from './jwt-auth.guard.js';
+import { GetUser } from '../common/decorators/get-user.decorator.js';
 
 @Controller('auth')
 export class AuthController {
@@ -19,11 +28,18 @@ export class AuthController {
         return this.authService.login(dto);
     }
 
-    // Захищений маршрут
+    @HttpCode(HttpStatus.OK)
+    @Post('reset-password')
+    async resetPassword(
+        @Body('email') email: string,
+        @Body('newPassword') newPassword: string,
+    ) {
+        return this.authService.resetPassword(email, newPassword);
+    }
+
     @UseGuards(JwtAuthGuard)
     @Get('profile')
-    getProfile(@Request() req: any) {
-        // req.user береться з того, що повернув метод validate() у JwtStrategy
-        return req.user;
+    getProfile(@GetUser() user: { id: string; email: string; role: string }) {
+        return user;
     }
 }

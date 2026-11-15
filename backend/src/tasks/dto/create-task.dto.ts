@@ -1,8 +1,10 @@
 import { IsNotEmpty, IsOptional, IsString, IsEnum, IsBoolean } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { TaskStatus } from '../schemas/task.schema.js';
 
 export class CreateTaskDto {
     @IsString()
+    @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
     @IsNotEmpty({ message: 'Назва завдання не може бути порожньою' })
     title: string;
 
@@ -19,11 +21,11 @@ export class CreateTaskDto {
     assignedTo?: string;
 
     @IsOptional()
-    @IsEnum(TaskStatus)
+    @IsEnum(TaskStatus, { message: 'Некоректний статус завдання' })
     status?: TaskStatus;
 
-    // ДОДАНО: Прапорець сімейного завдання
     @IsOptional()
+    @Transform(({ value }) => value === 'true' || value === true)
     @IsBoolean()
     isShared?: boolean;
 }

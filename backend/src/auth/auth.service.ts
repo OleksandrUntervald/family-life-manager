@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+    Injectable,
+    UnauthorizedException,
+    BadRequestException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service.js';
@@ -18,31 +22,59 @@ export class AuthService {
         }
 
         const user = await this.usersService.create(dto);
-        // Додаємо tokenVersion
-        return this.generateToken(user._id.toString(), user.email, user.role, user.tokenVersion || 0);
+        return this.generateToken(
+            user._id.toString(),
+            user.email,
+            user.role,
+            user.tokenVersion || 0,
+        );
     }
 
     async login(dto: LoginDto) {
-        const user = await this.usersService.findByEmail(dto.email);
+        const user = await this.usersService.findByEmail(
+            dto.email.trim().toLowerCase(),
+        );
         if (!user) {
             throw new UnauthorizedException('Невірний email або пароль');
         }
 
         if (user.isBanned) {
-            throw new UnauthorizedException('Ваш акаунт заблоковано адміністратором');
+            throw new UnauthorizedException(
+                'Ваш акаунт заблоковано адміністратором',
+            );
         }
 
-        const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
+        const isPasswordValid = await bcrypt.compare(
+            dto.password,
+            user.passwordHash,
+        );
         if (!isPasswordValid) {
             throw new UnauthorizedException('Невірний email або пароль');
         }
 
-        // Додаємо tokenVersion
-        return this.generateToken(user._id.toString(), user.email, user.role, user.tokenVersion || 0);
+        return this.generateToken(
+            user._id.toString(),
+            user.email,
+            user.role,
+            user.tokenVersion || 0,
+        );
     }
 
-    // ДОДАНО: Приймаємо tokenVersion і зашиваємо в payload
-    private generateToken(userId: string, email: string, role: string, tokenVersion: number) {
+    async resetPassword(email: string, newPassword: string) {
+        if (!email || !newPassword || newPassword.length < 6) {
+            throw new BadRequestException(
+                'Вкажіть коректний email та новий пароль (мінімум 6 символів)',
+            );
+        }
+        return this.usersService.resetPasswordByEmail(email, newPassword);
+    }
+
+    private generateToken(
+        userId: string,
+        email: string,
+        role: string,
+        tokenVersion: number,
+    ) {
         const payload = { sub: userId, email, role, tokenVersion };
         return {
             access_token: this.jwtService.sign(payload),

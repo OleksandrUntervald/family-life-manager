@@ -1,12 +1,14 @@
 import { IsNotEmpty, IsString, IsOptional, IsEnum } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateEquipmentDto {
     @IsString()
-    @IsNotEmpty()
+    @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+    @IsNotEmpty({ message: 'Назва обладнання обов’язкова' })
     name: string;
 
     @IsString()
-    @IsEnum(['car', 'home', 'other'])
+    @IsEnum(['car', 'home', 'other'], { message: 'Некоректна категорія (car, home, other)' })
     category: string;
 
     @IsOptional()
