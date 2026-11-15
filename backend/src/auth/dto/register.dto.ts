@@ -1,14 +1,16 @@
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
 
 export class RegisterDto {
     @IsString()
-    @MinLength(2, { message: "Ім'я повинно містити мінімум 2 символи" })
+    @IsNotEmpty({ message: 'Ім\'я обов\'язкове' })
     name: string;
 
-    @IsEmail({}, { message: 'Некоректний формат email' })
+    @IsEmail({}, { message: 'Некоректний email' })
+    @IsNotEmpty({ message: 'Email обов\'язковий' })
     email: string;
 
     @IsString()
-    @MinLength(6, { message: 'Пароль повинен містити мінімум 6 символів' })
+    @IsNotEmpty({ message: 'Пароль обов\'язковий' })
+    @MinLength(6, { message: 'Пароль має містити щонайменше 6 символів' })
     password: string;
 }

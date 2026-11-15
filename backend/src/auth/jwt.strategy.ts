@@ -8,7 +8,7 @@ import { UsersService } from '../users/users.service.js';
 export class JwtStrategy extends PassportStrategy(Strategy) {
     constructor(
         private configService: ConfigService,
-        private usersService: UsersService // <-- Підключили сервіс юзерів
+        private usersService: UsersService
     ) {
         super({
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -18,16 +18,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     async validate(payload: any) {
-        // Звертаємося до бази, щоб отримати найсвіжіші дані юзера
         const user = await this.usersService.findById(payload.sub);
 
         if (!user) {
             throw new UnauthorizedException('Користувача не знайдено');
         }
 
-        // ВИПРАВЛЕНО: Якщо користувач заблокований — відхиляємо будь-який запит
         if (user.isBanned) {
             throw new UnauthorizedException('Ваш акаунт заблоковано адміністратором');
+        }
+
+        // ВИПРАВЛЕНО: Якщо в базі старий запис без tokenVersion, вважаємо його нулем
+        const currentVersion = user.tokenVersion || 0;
+        if (currentVersion !== payload.tokenVersion) {
+            throw new UnauthorizedException('Сесія застаріла. Будь ласка, увійдіть знову.');
         }
 
         return { id: user._id, email: user.email, role: user.role };

@@ -1,38 +1,16 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/config/api';
-
-interface Transaction {
-    _id: string;
-    title: string;
-    amount: number;
-    type: 'income' | 'expense';
-    category: string;
-    createdAt: string;
-    receiptUrl?: string;
-    isShared?: boolean;
-}
-
-interface Summary {
-    totalIncome: number;
-    totalExpense: number;
-    balance: number;
-}
-
-interface Meta {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-}
+import { Transaction, Summary, Meta } from '@/types';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { FinanceSummary } from '@/components/finance/FinanceSummary';
+import { FinanceFilters } from '@/components/finance/FinanceFilters';
+import { TransactionList } from '@/components/finance/TransactionList';
 
 export default function FinancePage() {
-    const router = useRouter();
-
-    // Тумблер режиму
     const [viewMode, setViewMode] = useState<'personal' | 'family'>('personal');
 
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -83,15 +61,11 @@ export default function FinancePage() {
             setSummary(sumRes.data);
         } catch (error: any) {
             console.error('Помилка завантаження', error);
-            if (error.response?.status === 401) {
-                router.push('/login');
-            } else {
-                setErrorMsg('Не вдалося завантажити дані. Перевірте, чи ви перебуваєте в родині.');
-            }
+            setErrorMsg('Не вдалося завантажити дані. Перевірте, чи ви перебуваєте в родині.');
         } finally {
             setLoading(false);
         }
-    }, [page, sortBy, sortOrder, filterType, filterCategory, viewMode, router]);
+    }, [page, sortBy, sortOrder, filterType, filterCategory, viewMode]);
 
     useEffect(() => {
         fetchData();
@@ -106,7 +80,7 @@ export default function FinancePage() {
         payload.append('amount', formData.amount);
         payload.append('type', formData.type);
         payload.append('category', formData.category);
-        payload.append('isShared', (viewMode === 'family').toString()); // Прив'язуємо до режиму
+        payload.append('isShared', (viewMode === 'family').toString());
         if (file) payload.append('file', file);
 
         try {
@@ -171,7 +145,6 @@ export default function FinancePage() {
                 <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100 gap-4">
                     <h1 className="text-3xl font-bold text-gray-800">Фінанси</h1>
 
-                    {/* ТУМБЛЕР ГІБРИДНОГО РЕЖИМУ */}
                     <div className="flex bg-gray-100 p-1 rounded-xl shadow-inner">
                         <button
                             onClick={() => { setViewMode('personal'); setPage(1); }}
@@ -191,8 +164,8 @@ export default function FinancePage() {
                         </button>
                     </div>
 
-                    <Link href="/" className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium">
-                        На головну
+                    <Link href="/">
+                        <Button variant="secondary">На головну</Button>
                     </Link>
                 </div>
 
@@ -202,22 +175,7 @@ export default function FinancePage() {
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                        <p className="text-sm text-gray-500 mb-1">Дохід ({viewMode === 'family' ? 'родини' : 'особистий'})</p>
-                        <p className="text-2xl font-bold text-green-600">+{summary.totalIncome.toLocaleString()} ₴</p>
-                    </div>
-                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                        <p className="text-sm text-gray-500 mb-1">Витрати ({viewMode === 'family' ? 'родини' : 'особисті'})</p>
-                        <p className="text-2xl font-bold text-red-600">-{summary.totalExpense.toLocaleString()} ₴</p>
-                    </div>
-                    <div className={`p-4 rounded-xl shadow-sm border ${summary.balance >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                        <p className="text-sm text-gray-700 mb-1">Баланс</p>
-                        <p className={`text-2xl font-bold ${summary.balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                            {summary.balance.toLocaleString()} ₴
-                        </p>
-                    </div>
-                </div>
+                <FinanceSummary summary={summary} viewMode={viewMode} />
 
                 <div className={`bg-white p-6 rounded-xl shadow-md border ${editingId ? 'border-amber-400 ring-2 ring-amber-100' : 'border-gray-100'}`}>
                     <div className="flex justify-between items-center mb-4">
@@ -230,23 +188,21 @@ export default function FinancePage() {
                             </button>
                         )}
                     </div>
+
                     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                         <div className="flex flex-wrap gap-4 items-end">
                             <div className="flex-1 min-w-[200px]">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Назва</label>
-                                <input type="text" required placeholder={viewMode === 'family' ? "Продукти в Сільпо..." : "Кава..."} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-800" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} />
+                                <Input label="Назва" required placeholder="Кава..." value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} />
                             </div>
                             <div className="w-32">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Сума (₴)</label>
-                                <input type="number" required min="0.01" step="0.01" placeholder="1000" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-800" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} />
+                                <Input label="Сума (₴)" type="number" required min="0.01" step="0.01" placeholder="1000" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} />
                             </div>
                             <div className="w-32">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Категорія</label>
-                                <input type="text" required placeholder="Авто, Дім..." className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-800" value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} />
+                                <Input label="Категорія" required placeholder="Авто, Дім..." value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} />
                             </div>
-                            <div className="w-32">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Тип</label>
-                                <select className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-800 bg-white" value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as 'income' | 'expense' })}>
+                            <div className="w-32 flex flex-col gap-1">
+                                <label className="text-sm font-medium text-gray-700">Тип</label>
+                                <select className="w-full p-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-gray-800 transition-all" value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as 'income' | 'expense' })}>
                                     <option value="expense">Витрата</option>
                                     <option value="income">Дохід</option>
                                 </select>
@@ -258,113 +214,39 @@ export default function FinancePage() {
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Фото чека (необов'язково)</label>
                                 <input id="file-upload" type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer w-full" />
                             </div>
-                            <button type="submit" className={`w-full sm:w-auto px-8 py-2 text-white font-semibold rounded-lg transition-colors h-[42px] ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                            <Button type="submit" variant={editingId ? 'danger' : 'primary'} className={editingId ? 'bg-amber-500 hover:bg-amber-600 text-white' : ''}>
                                 {editingId ? 'Зберегти' : 'Додати транзакцію'}
-                            </button>
+                            </Button>
                         </div>
                     </form>
                 </div>
 
-                {/* ПАНЕЛЬ ФІЛЬТРІВ ТА СОРТУВАННЯ */}
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-wrap gap-4 items-center justify-between">
-                    <div className="flex gap-4 items-center w-full md:w-auto">
-                        <select
-                            value={filterType}
-                            onChange={(e) => { setFilterType(e.target.value); handleFilterChange(); }}
-                            className="p-2 border border-gray-200 rounded-lg text-sm text-gray-700 bg-gray-50 focus:ring-2 outline-none"
-                        >
-                            <option value="all">Всі типи</option>
-                            <option value="income">Тільки доходи</option>
-                            <option value="expense">Тільки витрати</option>
-                        </select>
+                <FinanceFilters
+                    filterType={filterType} setFilterType={setFilterType}
+                    filterCategory={filterCategory} setFilterCategory={setFilterCategory}
+                    sortBy={sortBy} setSortBy={setSortBy}
+                    sortOrder={sortOrder} setSortOrder={setSortOrder}
+                    handleFilterChange={handleFilterChange}
+                />
 
-                        <input
-                            type="text"
-                            placeholder="Пошук за категорією..."
-                            value={filterCategory}
-                            onChange={(e) => { setFilterCategory(e.target.value); handleFilterChange(); }}
-                            className="p-2 border border-gray-200 rounded-lg text-sm text-gray-700 bg-gray-50 focus:ring-2 outline-none flex-grow md:w-48"
-                        />
-                    </div>
-
-                    <div className="flex gap-2 items-center w-full md:w-auto">
-                        <span className="text-sm text-gray-500 font-medium">Сортування:</span>
-                        <select
-                            value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value)}
-                            className="p-2 border border-gray-200 rounded-lg text-sm text-gray-700 bg-gray-50 focus:ring-2 outline-none"
-                        >
-                            <option value="createdAt">За датою</option>
-                            <option value="amount">За сумою</option>
-                        </select>
-                        <button
-                            onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
-                            className="p-2 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors text-gray-600"
-                        >
-                            {sortOrder === 'desc' ? '⬇️' : '⬆️'}
-                        </button>
-                    </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
-                    {transactions.length === 0 ? (
-                        <div className="p-8 text-center text-gray-500 font-medium">Записів не знайдено.</div>
-                    ) : (
-                        <ul className="divide-y divide-gray-100">
-                            {transactions.map((tx) => (
-                                <li key={tx._id} className={`p-4 flex justify-between items-center transition-colors group ${editingId === tx._id ? 'bg-amber-50' : 'hover:bg-gray-50'}`}>
-                                    <div className="flex flex-col gap-1">
-                                        <div className="flex items-center gap-2">
-                                            <h3 className="font-bold text-gray-800 text-lg">{tx.title}</h3>
-                                            {tx.receiptUrl && (
-                                                <a href={tx.receiptUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 text-xs font-semibold rounded-md border border-blue-200 hover:bg-blue-100 transition-colors">
-                                                    🧾 Чек
-                                                </a>
-                                            )}
-                                        </div>
-                                        <div className="text-sm text-gray-500">
-                                            <span className="bg-gray-100 px-2 py-1 rounded-md text-xs font-medium mr-2 border border-gray-200">{tx.category}</span>
-                                            {new Date(tx.createdAt).toLocaleDateString('uk-UA')}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-4">
-                                        <span className={`font-bold text-lg ${tx.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                                            {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString()} ₴
-                                        </span>
-                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => startEdit(tx)} className="text-amber-500 hover:text-amber-700 font-medium p-2 text-sm bg-amber-50 rounded-lg hover:bg-amber-100">
-                                                ✎
-                                            </button>
-                                            <button onClick={() => handleDelete(tx._id)} className="text-red-500 hover:text-red-700 font-medium p-2 bg-red-50 rounded-lg hover:bg-red-100">
-                                                ✕
-                                            </button>
-                                        </div>
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </div>
+                <TransactionList
+                    transactions={transactions}
+                    editingId={editingId}
+                    onEdit={startEdit}
+                    onDelete={handleDelete}
+                />
 
                 {meta.totalPages > 1 && (
                     <div className="flex justify-center items-center gap-4 mt-6">
-                        <button
-                            disabled={page === 1}
-                            onClick={() => setPage(p => p - 1)}
-                            className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
-                        >
+                        <Button variant="secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
                             ← Назад
-                        </button>
+                        </Button>
                         <span className="text-sm font-medium text-gray-600">
                             Сторінка {meta.page} з {meta.totalPages}
                         </span>
-                        <button
-                            disabled={page === meta.totalPages}
-                            onClick={() => setPage(p => p + 1)}
-                            className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
-                        >
+                        <Button variant="secondary" disabled={page === meta.totalPages} onClick={() => setPage(p => p + 1)}>
                             Далі →
-                        </button>
+                        </Button>
                     </div>
                 )}
 

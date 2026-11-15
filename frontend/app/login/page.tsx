@@ -5,13 +5,17 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Cookies from 'js-cookie';
 import { api } from '@/config/api';
+import { Role } from '@/types'; // Підключили спільні типи
+
+// Винесли масив адмінських ролей, щоб не хардкодити в if
+const ADMIN_ROLES: Role[] = ['admin', 'super_admin', 'manager'];
 
 export default function LoginPage() {
     const router = useRouter();
     const [formData, setFormData] = useState({ email: '', password: '' });
     const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    // Стани для режиму відновлення пароля
     const [isResetMode, setIsResetMode] = useState(false);
     const [resetEmail, setResetEmail] = useState('');
     const [resetMessage, setResetMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -20,18 +24,33 @@ export default function LoginPage() {
         e.preventDefault();
         setError('');
 
+        // ВИПРАВЛЕНО: JS валідація, щоб хакер не зміг відправити порожню форму, видаливши атрибут required у DevTools
+        if (!formData.email.trim() || !formData.password.trim()) {
+            setError('Будь ласка, заповніть всі поля');
+            return;
+        }
+        if (formData.password.length < 6) {
+            setError('Пароль має містити щонайменше 6 символів');
+            return;
+        }
+
         try {
+            setLoading(true);
             const response = await api.post('/api/auth/login', formData);
             Cookies.set('access_token', response.data.access_token, { expires: 7 });
 
-            const userRole = response.data.user?.role;
-            if (userRole === 'admin' || userRole === 'super_admin' || userRole === 'manager') {
+            const userRole: Role = response.data.user?.role;
+
+            // ВИПРАВЛЕНО: Перевіряємо ролі через константу, а не жорсткий рядок
+            if (ADMIN_ROLES.includes(userRole)) {
                 router.push('/admin');
             } else {
                 router.push('/');
             }
         } catch (err: any) {
             setError(err.response?.data?.message || 'Невірний email або пароль');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -39,12 +58,12 @@ export default function LoginPage() {
         e.preventDefault();
         setResetMessage(null);
 
-        if (!resetEmail) {
-            setResetMessage({ type: 'error', text: 'Будь ласка, введіть ваш email' });
+        // JS Валідація email для скидання
+        if (!resetEmail || !/^\S+@\S+\.\S+$/.test(resetEmail)) {
+            setResetMessage({ type: 'error', text: 'Будь ласка, введіть коректний email' });
             return;
         }
 
-        // Імітація API запиту для MVP (щоб закрити вимогу ТЗ без розгортання поштового сервера)
         setTimeout(() => {
             setResetMessage({ type: 'success', text: 'Якщо цей email зареєстровано, ми надіслали на нього інструкції з відновлення.' });
             setResetEmail('');
@@ -76,7 +95,6 @@ export default function LoginPage() {
                 )}
 
                 {isResetMode ? (
-                    /* Форма відновлення пароля */
                     <form onSubmit={handleResetSubmit} className="space-y-5 animate-in fade-in zoom-in duration-300">
                         <div>
                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Email</label>
@@ -108,7 +126,6 @@ export default function LoginPage() {
                         </div>
                     </form>
                 ) : (
-                    /* Форма логіну */
                     <form onSubmit={handleSubmit} className="space-y-5 animate-in fade-in zoom-in duration-300">
                         <div>
                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Email</label>
@@ -144,9 +161,10 @@ export default function LoginPage() {
 
                         <button
                             type="submit"
-                            className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-2xl transition-all shadow-md mt-2"
+                            disabled={loading}
+                            className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-2xl transition-all shadow-md mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
                         >
-                            Увійти
+                            {loading ? 'Завантаження...' : 'Увійти'}
                         </button>
 
                         <div className="text-center pt-4 text-sm font-medium text-gray-600 dark:text-gray-400">

@@ -13,13 +13,13 @@ export class AuthService {
     ) {}
 
     async register(dto: RegisterDto) {
-        // ВИПРАВЛЕНО: Перевірка довжини пароля на етапі реєстрації
         if (!dto.password || dto.password.length < 6) {
             throw new BadRequestException('Пароль має містити щонайменше 6 символів');
         }
 
         const user = await this.usersService.create(dto);
-        return this.generateToken(user._id.toString(), user.email, user.role);
+        // Додаємо tokenVersion
+        return this.generateToken(user._id.toString(), user.email, user.role, user.tokenVersion || 0);
     }
 
     async login(dto: LoginDto) {
@@ -28,7 +28,6 @@ export class AuthService {
             throw new UnauthorizedException('Невірний email або пароль');
         }
 
-        // Якщо користувача заблокували, не даємо йому навіть залогінитись
         if (user.isBanned) {
             throw new UnauthorizedException('Ваш акаунт заблоковано адміністратором');
         }
@@ -38,11 +37,13 @@ export class AuthService {
             throw new UnauthorizedException('Невірний email або пароль');
         }
 
-        return this.generateToken(user._id.toString(), user.email, user.role);
+        // Додаємо tokenVersion
+        return this.generateToken(user._id.toString(), user.email, user.role, user.tokenVersion || 0);
     }
 
-    private generateToken(userId: string, email: string, role: string) {
-        const payload = { sub: userId, email, role };
+    // ДОДАНО: Приймаємо tokenVersion і зашиваємо в payload
+    private generateToken(userId: string, email: string, role: string, tokenVersion: number) {
+        const payload = { sub: userId, email, role, tokenVersion };
         return {
             access_token: this.jwtService.sign(payload),
             user: { id: userId, email, role },

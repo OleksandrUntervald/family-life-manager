@@ -1,17 +1,18 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module.js';
+import { MongooseExceptionFilter } from './common/filters/mongoose-exception.filter.js';
 
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
 
     app.setGlobalPrefix('api');
 
-    // ВИПРАВЛЕНО: Нормальний CORS для роботи з різними портами
+    // Налаштування CORS для зв'язку з фронтендом на 3001 порті
     app.enableCors({
-        origin: true,
+        origin: process.env.FRONTEND_URL || 'http://localhost:3001',
         credentials: true,
-        methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+        methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     });
 
     app.useGlobalPipes(
@@ -22,9 +23,11 @@ async function bootstrap() {
         }),
     );
 
-    // ВИДАЛЕНО: ProfanityInterceptor (щоб не псував паролі та українські назви міст)
+    app.useGlobalFilters(new MongooseExceptionFilter());
 
-    await app.listen(3000);
+    const port = process.env.PORT || 5000;
+    await app.listen(port);
+    console.log(`🚀 Бекенд успішно запущено на порті ${port}`);
 }
 
 bootstrap().catch((err) => console.error(err));

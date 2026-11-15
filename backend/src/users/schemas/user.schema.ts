@@ -14,7 +14,8 @@ export class User extends Document {
     @Prop({ required: true, unique: true })
     email: string;
 
-    @Prop({ required: true })
+    // ВИПРАВЛЕННЯ: select: false гарантує, що хеш ніколи не полетить на клієнт
+    @Prop({ required: true, select: false })
     passwordHash: string;
 
     @Prop({ required: true })
@@ -26,11 +27,12 @@ export class User extends Document {
     @Prop({ default: false })
     isBanned: boolean;
 
-    // ДОДАНО: Прив'язка до родини (замість teams)
+    @Prop({ default: 0 })
+    tokenVersion: number;
+
     @Prop({ type: Types.ObjectId, ref: 'Family', default: null })
     familyId: Types.ObjectId;
 
-    // Базові фізичні параметри для формул здоров'я
     @Prop({ default: 170 })
     height: number;
 

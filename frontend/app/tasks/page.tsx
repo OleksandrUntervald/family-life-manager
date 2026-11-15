@@ -20,10 +20,7 @@ interface Task {
 
 export default function TasksPage() {
     const router = useRouter();
-
-    // Стан тумблера: особисті завдання чи спільні
     const [viewMode, setViewMode] = useState<'personal' | 'family'>('personal');
-
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -68,7 +65,7 @@ export default function TasksPage() {
                 date: taskDate,
                 notes: taskNotes,
                 assignedTo: taskAssignee,
-                isShared: viewMode === 'family' // Прив'язуємо таску до поточного режиму
+                isShared: viewMode === 'family'
             });
             setNewTaskTitle('');
             setTaskNotes('');
@@ -80,7 +77,8 @@ export default function TasksPage() {
     };
 
     const changeStatus = async (id: string, newStatus: TaskStatus) => {
-        setTasks(tasks.map(t => t._id === id ? { ...t, status: newStatus } : t));
+        // ВИПРАВЛЕНО: Використовуємо callback для оновлення стану, щоб уникнути застарілих даних
+        setTasks(prevTasks => prevTasks.map(t => t._id === id ? { ...t, status: newStatus } : t));
         try {
             await api.patch(`/api/tasks/${id}/edit`, { status: newStatus });
         } catch (error) {
@@ -129,13 +127,10 @@ export default function TasksPage() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-6 md:p-10 font-sans">
             <div className="max-w-7xl mx-auto space-y-8">
-
                 <div className="flex flex-col md:flex-row justify-between items-center bg-white/70 backdrop-blur-lg px-6 py-4 rounded-3xl shadow-sm border border-white/50 gap-4">
                     <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-indigo-600 flex items-center gap-2">
                         📋 Дошка Завдань
                     </h1>
-
-                    {/* ТУМБЛЕР ГІБРИДНОГО РЕЖИМУ */}
                     <div className="flex bg-gray-100 p-1 rounded-xl shadow-inner">
                         <button
                             onClick={() => setViewMode('personal')}
@@ -154,7 +149,6 @@ export default function TasksPage() {
                             👨‍👩‍👧 Родина
                         </button>
                     </div>
-
                     <Link href="/" className="px-5 py-2 bg-white text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all shadow-sm">Назад</Link>
                 </div>
 
@@ -197,7 +191,6 @@ export default function TasksPage() {
                                 ) : (
                                     columns[status].tasks.map(task => (
                                         <div key={task._id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-3 group relative hover:shadow-md transition-shadow">
-
                                             {editingId === task._id ? (
                                                 <div className="flex flex-col gap-2">
                                                     <input type="text" className="p-2 border rounded-lg text-sm outline-none" value={editData.title} onChange={e => setEditData({...editData, title: e.target.value})} />

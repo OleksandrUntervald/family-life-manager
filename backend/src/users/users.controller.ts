@@ -1,8 +1,17 @@
-import { Controller, Get, Patch, Body, Param, UseGuards, Request, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Patch, Body, Param, UseGuards, BadRequestException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { UsersService } from './users.service.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { UserRole } from './schemas/user.schema.js';
+
+// ВИПРАВЛЕНО: Прибрано пробіли у шляхах до папки dto
+
+import { GetUser } from '../common/decorators/get-user.decorator.js';
+import { Roles } from '../common/decorators/roles.decorator.js';
+import { RolesGuard } from '../common/guards/roles.guard.js';
+import {UpdatePasswordDto} from "./dto/update-password.dto.js";
+import {UpdateProfileDto} from "./dto/update-profile.dto.js";
+import {UpdateSettingsDto} from "./dto/update-settings.dto.js";
 
 @Controller('users')
 export class UsersController {
@@ -10,76 +19,63 @@ export class UsersController {
 
     @UseGuards(JwtAuthGuard)
     @Get('me')
-    async getMe(@Request() req: any) {
-        return this.usersService.findById(req.user.id);
+    async getMe(@GetUser() user: { id: string }) {
+        return this.usersService.findById(user.id);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('settings')
-    async updateSettings(@Request() req: any, @Body() body: any) {
-        return this.usersService.updateSettings(req.user.id, body);
+    async updateSettings(@GetUser() user: { id: string }, @Body() body: UpdateSettingsDto) {
+        return this.usersService.updateSettings(user.id, body);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('profile')
-    async updateProfile(@Request() req: any, @Body('name') name: string) {
-        return this.usersService.updateProfile(req.user.id, name);
+    async updateProfile(@GetUser() user: { id: string }, @Body() body: UpdateProfileDto) {
+        return this.usersService.updateProfile(user.id, body.name);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('password')
-    async updatePassword(@Request() req: any, @Body() body: any) {
-        return this.usersService.updatePassword(req.user.id, body.oldPassword, body.newPassword);
+    async updatePassword(@GetUser() user: { id: string }, @Body() body: UpdatePasswordDto) {
+        return this.usersService.updatePassword(user.id, body.oldPassword, body.newPassword);
     }
 
-    // --- ЕНДПОІНТИ ДЛЯ АДМІНІСТРАТОРА ---
+    // --- АДМІНСЬКА ЧАСТИНА ---
 
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER)
     @Get('admin/all')
-    async getAllUsers(@Request() req: any) {
-        const currentUser = await this.usersService.findById(req.user.id);
-        if (currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.SUPER_ADMIN && currentUser?.role !== UserRole.MANAGER) {
-            throw new ForbiddenException('Доступ лише для адміністрації');
-        }
+    async getAllUsers() {
         return this.usersService.findAllUsers();
     }
 
-    // ДОДАНО: Ендпоінт для загальної аналітики
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER)
     @Get('admin/stats')
-    async getAdminStats(@Request() req: any) {
-        const currentUser = await this.usersService.findById(req.user.id);
-        if (currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.SUPER_ADMIN && currentUser?.role !== UserRole.MANAGER) {
-            throw new ForbiddenException('Доступ лише для адміністрації');
-        }
+    async getAdminStats() {
         return this.usersService.getPlatformStats();
     }
 
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
     @Patch('admin/:id/role')
-    async changeRole(@Request() req: any, @Param('id') targetId: string, @Body('role') role: UserRole) {
-        if (!Types.ObjectId.isValid(targetId)) throw new BadRequestException('Некоректний ID користувача');
+    async changeRole(@GetUser() user: { id: string }, @Param('id') targetId: string, @Body('role') role: UserRole) {
+        if (!Types.ObjectId.isValid(targetId)) throw new BadRequestException('Некоректний ID');
+        if (!Object.values(UserRole).includes(role)) throw new BadRequestException('Неприпустима роль');
 
-        if (!Object.values(UserRole).includes(role)) {
-            throw new BadRequestException('Неприпустима роль');
+        if (user.id === targetId) {
+            throw new BadRequestException('Ви не можете змінити роль самому собі');
         }
 
-        const currentUser = await this.usersService.findById(req.user.id);
-        if (currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.SUPER_ADMIN) {
-            throw new ForbiddenException('Тільки головний адмін може змінювати ролі');
-        }
         return this.usersService.updateUserRole(targetId, role);
     }
 
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
     @Patch('admin/:id/ban')
-    async toggleBan(@Request() req: any, @Param('id') targetId: string) {
-        if (!Types.ObjectId.isValid(targetId)) throw new BadRequestException('Некоректний ID користувача');
-
-        const currentUser = await this.usersService.findById(req.user.id);
-        if (currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.SUPER_ADMIN) {
-            throw new ForbiddenException('Тільки головний адмін може блокувати користувачів');
-        }
+    async toggleBan(@Param('id') targetId: string) {
+        if (!Types.ObjectId.isValid(targetId)) throw new BadRequestException('Некоректний ID');
         return this.usersService.toggleBanUser(targetId);
     }
 }

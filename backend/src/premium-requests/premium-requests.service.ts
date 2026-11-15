@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
@@ -11,10 +11,9 @@ export class PremiumRequestsService {
     constructor(
         @InjectModel(PremiumRequest.name) private requestModel: Model<PremiumRequest>,
         private usersService: UsersService,
-        private configService: ConfigService, // Додали ConfigService для читання .env/docker
+        private configService: ConfigService,
     ) {}
 
-    // Відправка повідомлення в Telegram
     private async notifyTelegram(reqData: any, userEmail: string) {
         const token = this.configService.get('TELEGRAM_BOT_TOKEN');
         const chatId = this.configService.get('TELEGRAM_CHAT_ID');
@@ -44,7 +43,6 @@ export class PremiumRequestsService {
         }
     }
 
-    // Створення заявки від реального користувача
     async createRequest(userId: string, telegram: string, plan = 'Family Premium PRO', comment = '') {
         const user = await this.usersService.findById(userId);
         const newReq = new this.requestModel({
@@ -62,13 +60,11 @@ export class PremiumRequestsService {
 
         const savedReq = await newReq.save();
 
-        // Відправляємо сповіщення у фоні (не блокуючи відповідь фронтенду)
         this.notifyTelegram(savedReq, user ? user.email : 'unknown').catch(console.error);
 
         return savedReq;
     }
 
-    // Отримання заявок з пагінацією
     async findAllPaginated(page = 1, limit = 25, status?: string, search?: string) {
         const query: any = {};
         if (status && status !== 'all') {
@@ -87,7 +83,7 @@ export class PremiumRequestsService {
         const [data, total] = await Promise.all([
             this.requestModel
                 .find(query)
-                .sort({ createdAt: -1, _id: -1 }) // Від найновішої до найстарішої
+                .sort({ createdAt: -1, _id: -1 })
                 .skip(skip)
                 .limit(limit)
                 .exec(),
@@ -103,23 +99,41 @@ export class PremiumRequestsService {
         };
     }
 
-    // Оновлення заявки менеджером/адміном
-    async updateRequest(id: string, updateData: any, managerName: string) {
+    // ВИПРАВЛЕНО: Додано userId того, хто схвалює (редагує) заявку
+    async updateRequest(id: string, updateData: any, managerName: string, managerId: string) {
+        // Знаходимо оригінальну заявку, щоб перевірити, чия вона
+        const originalRequest = await this.requestModel.findById(id).exec();
+        if (!originalRequest) {
+            throw new Error('Заявку не знайдено');
+        }
+
+        // 1. Блокуємо схвалення/редагування власної заявки (якщо ти менеджер/адмін, ти не можеш схвалити свою ж заявку)
+        if (originalRequest.userId && originalRequest.userId.toString() === managerId) {
+            throw new ForbiddenException('Ви не можете редагувати або схвалювати власну заявку');
+        }
+
         const updated = await this.requestModel.findByIdAndUpdate(
             id,
             { ...updateData, manager: managerName },
             { new: true },
         ).exec();
 
-        // Якщо заявку схвалили і там прив'язаний реальний юзер — автоматично даємо йому PREMIUM
+        // 2. Якщо заявку схвалили
         if (updated && updated.status === RequestStatus.AGREE && updated.userId) {
-            await this.usersService.updateUserRole(updated.userId.toString(), UserRole.PREMIUM);
+            const targetUser = await this.usersService.findById(updated.userId.toString());
+
+            if (targetUser) {
+                // Блокуємо пониження прав: якщо юзер вже Адмін чи Менеджер, ми не даємо йому статус Premium,
+                // щоб він не втратив свої вищі права доступу до адмінки.
+                if (targetUser.role === UserRole.USER) {
+                    await this.usersService.updateUserRole(updated.userId.toString(), UserRole.PREMIUM);
+                }
+            }
         }
 
         return updated;
     }
 
-    // Генератор тестового дампу
     async seedMockData() {
         const count = await this.requestModel.countDocuments();
         if (count >= 100) {

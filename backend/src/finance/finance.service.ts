@@ -11,10 +11,9 @@ export class FinanceService {
         @InjectModel(User.name) private userModel: Model<User>
     ) {}
 
-    // Хелпер для визначення правильного запиту до БД (особисті чи сімейні)
     private getQueryFilter(userId: string, user: any, isShared: boolean) {
         if (isShared) {
-            if (!user?.familyId) return { _id: null }; // Якщо немає родини, повертаємо порожнечу
+            if (!user?.familyId) return { _id: null };
             return { familyId: user.familyId, isShared: true };
         } else {
             return { userId, isShared: { $ne: true } };
@@ -67,14 +66,18 @@ export class FinanceService {
         const user = await this.userModel.findById(userId);
         const query = this.getQueryFilter(userId, user, isShared);
 
-        const transactions = await this.transactionModel.find(query).exec();
+        // ВИПРАВЛЕННЯ: Використовуємо Aggregation замість find().exec()
+        const result = await this.transactionModel.aggregate([
+            { $match: query },
+            { $group: { _id: '$type', total: { $sum: '$amount' } } }
+        ]).exec();
 
         let totalIncome = 0;
         let totalExpense = 0;
 
-        transactions.forEach(t => {
-            if (t.type === TransactionType.INCOME) totalIncome += t.amount;
-            else totalExpense += t.amount;
+        result.forEach(item => {
+            if (item._id === TransactionType.INCOME) totalIncome = item.total;
+            if (item._id === TransactionType.EXPENSE) totalExpense = item.total;
         });
 
         return { totalIncome, totalExpense, balance: totalIncome - totalExpense };

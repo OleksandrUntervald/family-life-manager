@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole } from './schemas/user.schema.js';
 import { RegisterDto } from '../auth/dto/register.dto.js';
+import { UpdateSettingsDto } from './dto/update-settings.dto.js';
 
 @Injectable()
 export class UsersService implements OnModuleInit {
@@ -27,11 +28,11 @@ export class UsersService implements OnModuleInit {
     }
 
     async findByEmail(email: string): Promise<User | null> {
-        return this.userModel.findOne({ email }).exec();
+        return this.userModel.findOne({ email }).select('+passwordHash').exec();
     }
 
     async findById(id: string): Promise<User | null> {
-        return this.userModel.findById(id).select('-passwordHash').exec();
+        return this.userModel.findById(id).exec();
     }
 
     async create(dto: RegisterDto): Promise<User> {
@@ -52,32 +53,24 @@ export class UsersService implements OnModuleInit {
         return newUser.save();
     }
 
-    async updateSettings(userId: string, updateData: any) {
-        delete updateData.role;
-        delete updateData.isBanned;
-        delete updateData.passwordHash;
-        delete updateData.email;
-
-        return this.userModel.findByIdAndUpdate(userId, updateData, { new: true }).exec();
+    async updateSettings(userId: string, updateData: UpdateSettingsDto) {
+        return this.userModel.findByIdAndUpdate(
+            userId,
+            { $set: updateData },
+            { new: true, runValidators: true }
+        ).exec();
     }
 
     async updateProfile(userId: string, name: string) {
-        if (!name || name.trim() === '') {
-            throw new BadRequestException('Ім\'я не може бути порожнім');
-        }
         return this.userModel.findByIdAndUpdate(
             userId,
             { name },
-            { new: true }
-        ).select('-passwordHash').exec();
+            { new: true, runValidators: true }
+        ).exec();
     }
 
     async updatePassword(userId: string, oldPass: string, newPass: string) {
-        if (!newPass || newPass.length < 6) {
-            throw new BadRequestException('Новий пароль має містити щонайменше 6 символів');
-        }
-
-        const user = await this.userModel.findById(userId);
+        const user = await this.userModel.findById(userId).select('+passwordHash');
         if (!user) throw new BadRequestException('Користувача не знайдено');
 
         const isMatch = await bcrypt.compare(oldPass, user.passwordHash);
@@ -87,6 +80,9 @@ export class UsersService implements OnModuleInit {
 
         const salt = await bcrypt.genSalt(10);
         user.passwordHash = await bcrypt.hash(newPass, salt);
+
+        user.tokenVersion = (user.tokenVersion || 0) + 1;
+
         await user.save();
 
         return { message: 'Пароль успішно змінено' };
@@ -95,10 +91,9 @@ export class UsersService implements OnModuleInit {
     // --- АДМІНСЬКІ МЕТОДИ ---
 
     async findAllUsers() {
-        return this.userModel.find().select('-passwordHash').sort({ createdAt: -1 }).exec();
+        return this.userModel.find().sort({ createdAt: -1 }).exec();
     }
 
-    // ДОДАНО: Аналітика користувачів
     async getPlatformStats() {
         const [total, banned, admins, premiums] = await Promise.all([
             this.userModel.countDocuments(),
@@ -120,8 +115,8 @@ export class UsersService implements OnModuleInit {
         return this.userModel.findByIdAndUpdate(
             targetUserId,
             { role },
-            { new: true }
-        ).select('-passwordHash').exec();
+            { new: true, runValidators: true }
+        ).exec();
     }
 
     async toggleBanUser(targetUserId: string) {
