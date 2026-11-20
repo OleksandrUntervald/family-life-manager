@@ -4,13 +4,15 @@ import { FinanceController } from './finance.controller.js';
 import { FinanceService } from './finance.service.js';
 import { Transaction, TransactionSchema } from './schemas/transaction.schema.js';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module.js';
-import { User, UserSchema } from '../users/schemas/user.schema.js'; // <-- Додали
+import { User, UserSchema } from '../users/schemas/user.schema.js';
+import { Family, FamilySchema } from '../families/schemas/family.schema.js';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Transaction.name, schema: TransactionSchema },
-      { name: User.name, schema: UserSchema } // <-- Додали
+      { name: User.name, schema: UserSchema },
+      { name: Family.name, schema: FamilySchema },
     ]),
     CloudinaryModule,
   ],

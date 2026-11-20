@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/config/api';
+import { Transaction, Workout, Task, TaskStatus } from '@/types';
 
 interface ActivityItem {
     id: string;
@@ -9,7 +10,15 @@ interface ActivityItem {
     bgClass: string;
     title: string;
     subtitle: string;
+    createdAt: number;
+    isShared?: boolean;
 }
+
+const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
+    NEW: 'Нове завдання 🆕',
+    IN_PROGRESS: 'В процесі виконання ⏳',
+    DONE: 'Виконано ✅',
+};
 
 export default function RecentActivityFeed() {
     const [items, setItems] = useState<ActivityItem[]>([]);
@@ -18,48 +27,75 @@ export default function RecentActivityFeed() {
     useEffect(() => {
         const loadRecent = async () => {
             try {
-                const [finRes, workRes, taskRes] = await Promise.allSettled([
-                    api.get('/api/finance'),
-                    api.get('/api/workouts'),
-                    api.get('/api/tasks'),
+                const [
+                    personalFinRes,
+                    familyFinRes,
+                    workRes,
+                    personalTaskRes,
+                    familyTaskRes,
+                ] = await Promise.allSettled([
+                    api.get<{ data: Transaction[] }>('/api/finance?limit=5&isShared=false'),
+                    api.get<{ data: Transaction[] }>('/api/finance?limit=5&isShared=true'),
+                    api.get<Workout[]>('/api/workouts'),
+                    api.get<Task[]>('/api/tasks?isShared=false'),
+                    api.get<Task[]>('/api/tasks?isShared=true'),
                 ]);
 
                 const list: ActivityItem[] = [];
 
-                if (finRes.status === 'fulfilled' && Array.isArray(finRes.value.data) && finRes.value.data[0]) {
-                    const t = finRes.value.data[0];
+                const allFinances: Transaction[] = [
+                    ...(personalFinRes.status === 'fulfilled' ? personalFinRes.value.data?.data || [] : []),
+                    ...(familyFinRes.status === 'fulfilled' ? familyFinRes.value.data?.data || [] : []),
+                ];
+
+                allFinances.slice(0, 4).forEach((t) => {
                     list.push({
                         id: `fin-${t._id}`,
                         icon: t.type === 'income' ? '💵' : '💰',
                         bgClass: 'bg-green-100 dark:bg-green-900/30 text-green-600',
-                        title: `${t.type === 'income' ? 'Дохід' : 'Витрата'}: ${t.category || 'Фінанси'} (${t.amount} ₴)`,
-                        subtitle: t.description || 'Остання фінансова операція',
+                        title: `${t.type === 'income' ? 'Дохід' : 'Витрата'}: ${t.title} (${t.amount} ₴)`,
+                        subtitle: `Категорія: ${t.category}`,
+                        createdAt: new Date(t.createdAt).getTime(),
+                        isShared: t.isShared,
+                    });
+                });
+
+                if (workRes.status === 'fulfilled' && Array.isArray(workRes.value.data)) {
+                    workRes.value.data.slice(0, 2).forEach((w) => {
+                        list.push({
+                            id: `work-${w._id}`,
+                            icon: '🏋️',
+                            bgClass: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600',
+                            title: `Тренування: ${w.title}`,
+                            subtitle: `${w.weight} кг × ${w.reps} повт. (${w.sets} підх.)`,
+                            createdAt: new Date(w.createdAt || w.date).getTime(),
+                        });
                     });
                 }
 
-                if (workRes.status === 'fulfilled' && Array.isArray(workRes.value.data) && workRes.value.data[0]) {
-                    const w = workRes.value.data[0];
-                    list.push({
-                        id: `work-${w._id}`,
-                        icon: '🏋️',
-                        bgClass: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600',
-                        title: `Тренування: ${w.title || w.name || w.exercise || 'Заняття в залі'}`,
-                        subtitle: w.weight ? `Робоча вага: ${w.weight} кг` : 'Записано у щоденник тренувань',
-                    });
-                }
+                const allTasks: Task[] = [
+                    ...(personalTaskRes.status === 'fulfilled' && Array.isArray(personalTaskRes.value.data)
+                        ? personalTaskRes.value.data
+                        : []),
+                    ...(familyTaskRes.status === 'fulfilled' && Array.isArray(familyTaskRes.value.data)
+                        ? familyTaskRes.value.data
+                        : []),
+                ];
 
-                if (taskRes.status === 'fulfilled' && Array.isArray(taskRes.value.data) && taskRes.value.data[0]) {
-                    const task = taskRes.value.data[0];
+                allTasks.slice(0, 4).forEach((task) => {
                     list.push({
                         id: `task-${task._id}`,
-                        icon: '✓',
+                        icon: task.status === 'DONE' ? '✅' : '📋',
                         bgClass: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600',
                         title: `Завдання: "${task.title}"`,
-                        subtitle: task.completed ? 'Виконано ✅' : 'В процесі виконання ⏳',
+                        subtitle: TASK_STATUS_LABEL[task.status] || 'Нове завдання',
+                        createdAt: new Date(task.createdAt || task.date).getTime(),
+                        isShared: task.isShared,
                     });
-                }
+                });
 
-                setItems(list);
+                list.sort((a, b) => b.createdAt - a.createdAt);
+                setItems(list.slice(0, 6));
             } catch (e) {
                 console.error(e);
             } finally {
@@ -85,17 +121,28 @@ export default function RecentActivityFeed() {
                     items.map((item, idx) => (
                         <div
                             key={item.id}
-                            className={`flex items-center gap-4 ${
+                            className={`flex items-center justify-between gap-4 ${
                                 idx !== items.length - 1 ? 'pb-4 border-b border-gray-100 dark:border-slate-700' : ''
                             }`}
                         >
-                            <div className={`w-10 h-10 ${item.bgClass} rounded-full flex items-center justify-center text-lg`}>
-                                {item.icon}
+                            <div className="flex items-center gap-4">
+                                <div className={`w-10 h-10 ${item.bgClass} rounded-full flex items-center justify-center text-lg shrink-0`}>
+                                    {item.icon}
+                                </div>
+                                <div>
+                                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                        {item.title}
+                                    </p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        {item.subtitle}
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{item.title}</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">{item.subtitle}</p>
-                            </div>
+                            {item.isShared && (
+                                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300 shrink-0">
+                                    👨‍👩‍👧 Родина
+                                </span>
+                            )}
                         </div>
                     ))
                 )}

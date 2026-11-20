@@ -6,7 +6,6 @@ import {
     Body,
     Param,
     UseGuards,
-    BadRequestException,
 } from '@nestjs/common';
 import { UsersService } from './users.service.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -18,6 +17,14 @@ import { ParseObjectIdPipe } from '../common/pipes/parse-object-id.pipe.js';
 import { UpdatePasswordDto } from './dto/update-password.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { UpdateSettingsDto } from './dto/update-settings.dto.js';
+import { ChangeRoleDto } from './dto/change-role.dto.js';
+import { ActivateKeyDto } from './dto/activate-key.dto.js';
+
+interface AuthUser {
+    id: string;
+    email: string;
+    role: UserRole;
+}
 
 @Controller('users')
 export class UsersController {
@@ -25,36 +32,36 @@ export class UsersController {
 
     @UseGuards(JwtAuthGuard)
     @Get('me')
-    async getMe(@GetUser() user: { id?: string; _id?: string }) {
-        return this.usersService.findById(String(user.id || user._id));
+    async getMe(@GetUser() user: AuthUser) {
+        return this.usersService.findById(user.id);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('settings')
     async updateSettings(
-        @GetUser() user: { id?: string; _id?: string },
+        @GetUser() user: AuthUser,
         @Body() body: UpdateSettingsDto,
     ) {
-        return this.usersService.updateSettings(String(user.id || user._id), body);
+        return this.usersService.updateSettings(user.id, body);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('profile')
     async updateProfile(
-        @GetUser() user: { id?: string; _id?: string },
+        @GetUser() user: AuthUser,
         @Body() body: UpdateProfileDto,
     ) {
-        return this.usersService.updateProfile(String(user.id || user._id), body.name);
+        return this.usersService.updateProfile(user.id, body.name);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('password')
     async updatePassword(
-        @GetUser() user: { id?: string; _id?: string },
+        @GetUser() user: AuthUser,
         @Body() body: UpdatePasswordDto,
     ) {
         return this.usersService.updatePassword(
-            String(user.id || user._id),
+            user.id,
             body.oldPassword,
             body.newPassword,
         );
@@ -63,10 +70,10 @@ export class UsersController {
     @UseGuards(JwtAuthGuard)
     @Post('activate-key')
     async activateKey(
-        @GetUser() user: { id?: string; _id?: string },
-        @Body('key') key: string,
+        @GetUser() user: AuthUser,
+        @Body() body: ActivateKeyDto,
     ) {
-        return this.usersService.activatePremiumKey(String(user.id || user._id), key);
+        return this.usersService.activatePremiumKey(user.id, body.key);
     }
 
     // --- АДМІНСЬКА ЧАСТИНА ---
@@ -88,26 +95,23 @@ export class UsersController {
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
     @Post('admin/generate-key')
-    async generateActivationKey(@GetUser() user: { id?: string; _id?: string }) {
-        return this.usersService.generateActivationKey(String(user.id || user._id));
+    async generateActivationKey(@GetUser() user: AuthUser) {
+        return this.usersService.generateActivationKey(user.id);
     }
 
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
     @Patch('admin/:id/role')
     async changeRole(
-        @GetUser() user: { id?: string; _id?: string },
+        @GetUser() user: AuthUser,
         @Param('id', ParseObjectIdPipe) targetId: string,
-        @Body('role') role: UserRole,
+        @Body() body: ChangeRoleDto,
     ) {
-        if (!Object.values(UserRole).includes(role)) {
-            throw new BadRequestException('Неприпустима роль');
-        }
-
         return this.usersService.updateUserRole(
             targetId,
-            role,
-            String(user.id || user._id),
+            body.role,
+            user.id,
+            user.role,
         );
     }
 
@@ -115,12 +119,9 @@ export class UsersController {
     @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
     @Patch('admin/:id/ban')
     async toggleBan(
-        @GetUser() user: { id?: string; _id?: string },
+        @GetUser() user: AuthUser,
         @Param('id', ParseObjectIdPipe) targetId: string,
     ) {
-        return this.usersService.toggleBanUser(
-            targetId,
-            String(user.id || user._id),
-        );
+        return this.usersService.toggleBanUser(targetId, user.id, user.role);
     }
 }

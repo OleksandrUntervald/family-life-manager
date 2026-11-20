@@ -10,6 +10,8 @@ import {
 import { AuthService } from './auth.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
+import { ForgotPasswordDto } from './dto/forgot-password.dto.js';
+import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { GetUser } from '../common/decorators/get-user.decorator.js';
 
@@ -29,12 +31,15 @@ export class AuthController {
     }
 
     @HttpCode(HttpStatus.OK)
+    @Post('forgot-password')
+    async forgotPassword(@Body() dto: ForgotPasswordDto) {
+        return this.authService.forgotPassword(dto.email);
+    }
+
+    @HttpCode(HttpStatus.OK)
     @Post('reset-password')
-    async resetPassword(
-        @Body('email') email: string,
-        @Body('newPassword') newPassword: string,
-    ) {
-        return this.authService.resetPassword(email, newPassword);
+    async resetPassword(@Body() dto: ResetPasswordDto) {
+        return this.authService.resetPassword(dto.token, dto.newPassword);
     }
 
     @UseGuards(JwtAuthGuard)

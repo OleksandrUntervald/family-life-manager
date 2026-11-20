@@ -4,7 +4,7 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import {
     PremiumRequest,
@@ -12,6 +12,7 @@ import {
 } from './schemas/premium-request.schema.js';
 import { UsersService } from '../users/users.service.js';
 import { UserRole } from '../users/schemas/user.schema.js';
+import { escapeRegex } from '../common/utils/escape-regex.util.js';
 import { UpdatePremiumRequestDto } from './dto/update-premium-request.dto.js';
 
 @Injectable()
@@ -61,7 +62,7 @@ export class PremiumRequestsService {
     ) {
         const user = await this.usersService.findById(userId);
         const newReq = new this.requestModel({
-            userId,
+            userId: new Types.ObjectId(userId),
             name: user.name,
             email: user.email,
             telegram,
@@ -90,10 +91,11 @@ export class PremiumRequestsService {
             query.status = status;
         }
         if (search) {
+            const safeSearch = escapeRegex(search);
             query.$or = [
-                { name: { $regex: search, $options: 'i' } },
-                { email: { $regex: search, $options: 'i' } },
-                { telegram: { $regex: search, $options: 'i' } },
+                { name: { $regex: safeSearch, $options: 'i' } },
+                { email: { $regex: safeSearch, $options: 'i' } },
+                { telegram: { $regex: safeSearch, $options: 'i' } },
             ];
         }
 
@@ -130,7 +132,7 @@ export class PremiumRequestsService {
 
         if (
             originalRequest.userId &&
-            originalRequest.userId.toString() === managerId
+            String(originalRequest.userId) === String(managerId)
         ) {
             throw new ForbiddenException(
                 'Ви не можете редагувати або схвалювати власну заявку',
@@ -149,12 +151,12 @@ export class PremiumRequestsService {
 
         if (updated && updated.status === RequestStatus.AGREE && updated.userId) {
             const targetUser = await this.usersService.findById(
-                updated.userId.toString(),
+                String(updated.userId),
             );
 
             if (targetUser && targetUser.role === UserRole.USER) {
                 await this.usersService.updateUserRole(
-                    updated.userId.toString(),
+                    String(updated.userId),
                     UserRole.PREMIUM,
                 );
             }

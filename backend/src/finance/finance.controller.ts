@@ -19,6 +19,7 @@ import { ParseObjectIdPipe } from '../common/pipes/parse-object-id.pipe.js';
 import type { UploadedFileType } from '../common/interfaces/uploaded-file.interface.js';
 import { CreateTransactionDto } from './dto/create-transaction.dto.js';
 import { UpdateTransactionDto } from './dto/update-transaction.dto.js';
+import { FinanceQueryDto } from './dto/finance-query.dto.js';
 
 @UseGuards(JwtAuthGuard)
 @Controller('finance')
@@ -46,24 +47,9 @@ export class FinanceController {
     @Get()
     findAll(
         @GetUser() user: { id: string },
-        @Query('page') page?: string,
-        @Query('limit') limit?: string,
-        @Query('sortBy') sortBy?: string,
-        @Query('sortOrder') sortOrder?: 'asc' | 'desc',
-        @Query('type') type?: string,
-        @Query('category') category?: string,
-        @Query('isShared') isShared?: string,
+        @Query() query: FinanceQueryDto,
     ) {
-        return this.financeService.findAll(
-            user.id,
-            page ? parseInt(page, 10) : 1,
-            limit ? parseInt(limit, 10) : 10,
-            sortBy || 'createdAt',
-            sortOrder || 'desc',
-            type,
-            category,
-            isShared === 'true',
-        );
+        return this.financeService.findAll(user.id, query);
     }
 
     @Delete(':id')

@@ -16,7 +16,9 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
 
     const [isResetMode, setIsResetMode] = useState(false);
+    const [resetStep, setResetStep] = useState<'request' | 'confirm'>('request');
     const [resetEmail, setResetEmail] = useState('');
+    const [resetToken, setResetToken] = useState('');
     const [resetNewPassword, setResetNewPassword] = useState('');
     const [resetLoading, setResetLoading] = useState(false);
     const [resetMessage, setResetMessage] = useState<{
@@ -41,7 +43,6 @@ export default function LoginPage() {
             setLoading(true);
             const response = await api.post('/api/auth/login', formData);
             Cookies.set('access_token', response.data.access_token, { expires: 7 });
-            localStorage.setItem('token', response.data.access_token);
 
             const userRole: Role = response.data.user?.role;
 
@@ -58,12 +59,42 @@ export default function LoginPage() {
         }
     };
 
-    const handleResetSubmit = async (e: React.FormEvent) => {
+    const handleRequestReset = async (e: React.FormEvent) => {
         e.preventDefault();
         setResetMessage(null);
 
         if (!resetEmail || !/^\S+@\S+\.\S+$/.test(resetEmail.trim())) {
             setResetMessage({ type: 'error', text: 'Будь ласка, введіть коректний email' });
+            return;
+        }
+
+        try {
+            setResetLoading(true);
+            const res = await api.post('/api/auth/forgot-password', {
+                email: resetEmail.trim(),
+            });
+            setResetMessage({
+                type: 'success',
+                text: res.data?.message || 'Якщо цей email зареєстровано, токен відновлення надіслано.',
+            });
+            setResetStep('confirm');
+        } catch (err: any) {
+            const msg = err.response?.data?.message;
+            setResetMessage({
+                type: 'error',
+                text: Array.isArray(msg) ? msg[0] : msg || 'Не вдалося надіслати запит',
+            });
+        } finally {
+            setResetLoading(false);
+        }
+    };
+
+    const handleConfirmReset = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setResetMessage(null);
+
+        if (!resetToken.trim()) {
+            setResetMessage({ type: 'error', text: 'Введіть токен відновлення' });
             return;
         }
         if (!resetNewPassword || resetNewPassword.length < 6) {
@@ -77,14 +108,14 @@ export default function LoginPage() {
         try {
             setResetLoading(true);
             const res = await api.post('/api/auth/reset-password', {
-                email: resetEmail.trim(),
+                token: resetToken.trim(),
                 newPassword: resetNewPassword,
             });
             setResetMessage({
                 type: 'success',
                 text: res.data?.message || 'Пароль успішно оновлено! Тепер ви можете увійти.',
             });
-            setResetEmail('');
+            setResetToken('');
             setResetNewPassword('');
         } catch (err: any) {
             const msg = err.response?.data?.message;
@@ -102,11 +133,13 @@ export default function LoginPage() {
             <div className="max-w-md w-full p-8 bg-white dark:bg-slate-800 rounded-3xl shadow-lg border border-gray-100 dark:border-slate-700">
                 <div className="text-center mb-8">
                     <h2 className="text-3xl font-extrabold text-gray-800 dark:text-gray-100 mb-2">
-                        {isResetMode ? 'Скидання пароля' : 'Вхід в систему'}
+                        {isResetMode ? 'Відновлення пароля' : 'Вхід в систему'}
                     </h2>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                         {isResetMode
-                            ? 'Вкажіть ваш email та встановіть новий пароль'
+                            ? resetStep === 'request'
+                                ? 'Вкажіть ваш email для отримання токена'
+                                : 'Введіть отриманий токен та новий пароль'
                             : 'Вітаємо у Life Manager SaaS'}
                     </p>
                 </div>
@@ -130,57 +163,105 @@ export default function LoginPage() {
                 )}
 
                 {isResetMode ? (
-                    <form onSubmit={handleResetSubmit} className="space-y-5">
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                                Ваш Email
-                            </label>
-                            <input
-                                type="email"
-                                required
-                                placeholder="ваша@пошта.com"
-                                className="w-full p-3.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-gray-800 dark:text-gray-100 transition-all"
-                                value={resetEmail}
-                                onChange={(e) => setResetEmail(e.target.value)}
-                            />
-                        </div>
+                    resetStep === 'request' ? (
+                        <form onSubmit={handleRequestReset} className="space-y-5">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                                    Ваш Email
+                                </label>
+                                <input
+                                    type="email"
+                                    required
+                                    placeholder="ваша@пошта.com"
+                                    className="w-full p-3.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-gray-800 dark:text-gray-100 transition-all"
+                                    value={resetEmail}
+                                    onChange={(e) => setResetEmail(e.target.value)}
+                                />
+                            </div>
 
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                                Новий пароль (мін. 6 символів)
-                            </label>
-                            <input
-                                type="password"
-                                required
-                                minLength={6}
-                                placeholder="••••••••"
-                                className="w-full p-3.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-gray-800 dark:text-gray-100 transition-all"
-                                value={resetNewPassword}
-                                onChange={(e) => setResetNewPassword(e.target.value)}
-                            />
-                        </div>
-
-                        <button
-                            type="submit"
-                            disabled={resetLoading}
-                            className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-2xl transition-all shadow-md cursor-pointer disabled:opacity-70"
-                        >
-                            {resetLoading ? 'Оновлення...' : 'Встановити новий пароль'}
-                        </button>
-
-                        <div className="text-center mt-6">
                             <button
-                                type="button"
-                                onClick={() => {
-                                    setIsResetMode(false);
-                                    setResetMessage(null);
-                                }}
-                                className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                                type="submit"
+                                disabled={resetLoading}
+                                className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-2xl transition-all shadow-md cursor-pointer disabled:opacity-70"
                             >
-                                ← Повернутися до входу
+                                {resetLoading ? 'Надсилання...' : 'Отримати токен відновлення'}
                             </button>
-                        </div>
-                    </form>
+
+                            <div className="flex justify-between items-center pt-2 text-sm">
+                                <button
+                                    type="button"
+                                    onClick={() => setResetStep('confirm')}
+                                    className="font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                                >
+                                    Вже маю токен
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsResetMode(false);
+                                        setResetMessage(null);
+                                        setResetStep('request');
+                                    }}
+                                    className="font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 cursor-pointer"
+                                >
+                                    ← Назад до входу
+                                </button>
+                            </div>
+                        </form>
+                    ) : (
+                        <form onSubmit={handleConfirmReset} className="space-y-5">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                                    Токен відновлення
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="Вставте токен..."
+                                    className="w-full p-3.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-gray-800 dark:text-gray-100 font-mono text-xs transition-all"
+                                    value={resetToken}
+                                    onChange={(e) => setResetToken(e.target.value)}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                                    Новий пароль (мін. 6 символів)
+                                </label>
+                                <input
+                                    type="password"
+                                    required
+                                    minLength={6}
+                                    placeholder="••••••••"
+                                    className="w-full p-3.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-gray-800 dark:text-gray-100 transition-all"
+                                    value={resetNewPassword}
+                                    onChange={(e) => setResetNewPassword(e.target.value)}
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={resetLoading}
+                                className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-2xl transition-all shadow-md cursor-pointer disabled:opacity-70"
+                            >
+                                {resetLoading ? 'Оновлення...' : 'Встановити новий пароль'}
+                            </button>
+
+                            <div className="text-center pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsResetMode(false);
+                                        setResetMessage(null);
+                                        setResetStep('request');
+                                    }}
+                                    className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 cursor-pointer"
+                                >
+                                    ← Повернутися до входу
+                                </button>
+                            </div>
+                        </form>
+                    )
                 ) : (
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div>
@@ -205,6 +286,7 @@ export default function LoginPage() {
                                     type="button"
                                     onClick={() => {
                                         setIsResetMode(true);
+                                        setResetStep('request');
                                         setError('');
                                     }}
                                     className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"

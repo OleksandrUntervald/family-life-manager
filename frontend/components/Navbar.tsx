@@ -16,6 +16,7 @@ export default function Navbar() {
         { href: '/tasks', label: 'Завдання', icon: '📋' },
         { href: '/health', label: 'Активність', icon: '🍏' },
         { href: '/workouts', label: 'Тренування', icon: '🏋️' },
+        { href: '/analytics', label: 'Аналітика', icon: '📈' },
         { href: '/profile', label: 'Профіль', icon: '👤' },
     ];
 
@@ -23,7 +24,7 @@ export default function Navbar() {
         <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-lg border-b border-gray-200 dark:border-slate-800 sticky top-0 z-50 transition-colors duration-300">
             <div className="max-w-6xl mx-auto px-4 overflow-x-auto no-scrollbar">
                 <div className="flex gap-2 py-3">
-                    {links.map(link => {
+                    {links.map((link) => {
                         const isActive = pathname === link.href;
                         return (
                             <Link

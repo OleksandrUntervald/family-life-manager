@@ -3,15 +3,33 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api } from '@/config/api';
+import { Transaction, Task, Workout, Summary } from '@/types';
 import { CURRENCY_META, CurrencyCode } from '@/components/CurrencyWidget';
 import {
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    BarChart, Bar, ReferenceLine
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+    ReferenceLine,
 } from 'recharts';
 
+interface HealthRecord {
+    _id: string;
+    date: string;
+    weight: number;
+    steps: number;
+    consumedCalories: number;
+    water: number;
+}
+
 export default function AnalyticsPage() {
-    const [healthData, setHealthData] = useState<any[]>([]);
-    const [rawExpenses, setRawExpenses] = useState<any[]>([]);
+    const [healthData, setHealthData] = useState<HealthRecord[]>([]);
+    const [rawExpenses, setRawExpenses] = useState<Transaction[]>([]);
     const [summaryStats, setSummaryStats] = useState({
         totalIncomeUAH: 0,
         totalExpenseUAH: 0,
@@ -44,58 +62,72 @@ export default function AnalyticsPage() {
         if (savedRates) {
             try {
                 setRates((prev) => ({ ...prev, ...JSON.parse(savedRates) }));
-            } catch (e) {}
+            } catch {
+                // ignore malformed cache
+            }
         }
 
         const fetchData = async () => {
             try {
                 setLoading(true);
-                const [healthRes, financeRes, tasksRes, workoutsRes, userRes] = await Promise.allSettled([
-                    api.get('/api/health'),
-                    api.get('/api/finance'),
-                    api.get('/api/tasks'),
-                    api.get('/api/workouts'),
+                const [
+                    healthRes,
+                    personalSumRes,
+                    familySumRes,
+                    personalTxRes,
+                    familyTxRes,
+                    personalTasksRes,
+                    familyTasksRes,
+                    workoutsRes,
+                    userRes,
+                ] = await Promise.allSettled([
+                    api.get<HealthRecord[]>('/api/health'),
+                    api.get<Summary>('/api/finance/summary?isShared=false'),
+                    api.get<Summary>('/api/finance/summary?isShared=true'),
+                    api.get<{ data: Transaction[] }>('/api/finance?limit=100&isShared=false'),
+                    api.get<{ data: Transaction[] }>('/api/finance?limit=100&isShared=true'),
+                    api.get<Task[]>('/api/tasks?isShared=false'),
+                    api.get<Task[]>('/api/tasks?isShared=true'),
+                    api.get<Workout[]>('/api/workouts'),
                     api.get('/api/users/me'),
                 ]);
 
-                if (healthRes.status === 'fulfilled') {
-                    const rawHealth = Array.isArray(healthRes.value.data) ? healthRes.value.data : [];
-                    const sortedHealth = rawHealth.sort(
-                        (a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()
-                    );
-                    setHealthData(sortedHealth);
+                if (healthRes.status === 'fulfilled' && Array.isArray(healthRes.value.data)) {
+                    const validWeightRecords = healthRes.value.data
+                        .filter((r) => Number(r.weight) > 0)
+                        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                    setHealthData(validWeightRecords);
                 }
 
-                let income = 0;
-                let expense = 0;
-                if (financeRes.status === 'fulfilled') {
-                    const rawFinance = financeRes.value.data?.data || financeRes.value.data || [];
-                    const txs = Array.isArray(rawFinance) ? rawFinance : [];
-                    txs.forEach((t: any) => {
-                        if (t.type === 'income') income += Number(t.amount) || 0;
-                        if (t.type === 'expense') expense += Number(t.amount) || 0;
-                    });
-                    setRawExpenses(txs.filter((t: any) => t.type === 'expense'));
-                }
+                const pSum = personalSumRes.status === 'fulfilled' ? personalSumRes.value.data : { totalIncome: 0, totalExpense: 0 };
+                const fSum = familySumRes.status === 'fulfilled' ? familySumRes.value.data : { totalIncome: 0, totalExpense: 0 };
+                const totalIncomeUAH = (pSum?.totalIncome || 0) + (fSum?.totalIncome || 0);
+                const totalExpenseUAH = (pSum?.totalExpense || 0) + (fSum?.totalExpense || 0);
 
-                let tTotal = 0;
-                let tDone = 0;
-                if (tasksRes.status === 'fulfilled') {
-                    const tasks = Array.isArray(tasksRes.value.data) ? tasksRes.value.data : [];
-                    tTotal = tasks.length;
-                    tDone = tasks.filter((t: any) => t.status === 'DONE' || t.completed).length;
-                }
+                const pTxs = personalTxRes.status === 'fulfilled' ? personalTxRes.value.data?.data || [] : [];
+                const fTxs = familyTxRes.status === 'fulfilled' ? familyTxRes.value.data?.data || [] : [];
+                setRawExpenses([...pTxs, ...fTxs].filter((t) => t.type === 'expense'));
+
+                const pTasks = personalTasksRes.status === 'fulfilled' && Array.isArray(personalTasksRes.value.data) ? personalTasksRes.value.data : [];
+                const fTasks = familyTasksRes.status === 'fulfilled' && Array.isArray(familyTasksRes.value.data) ? familyTasksRes.value.data : [];
+                const allTasks = [...pTasks, ...fTasks];
+                const tTotal = allTasks.length;
+                const tDone = allTasks.filter((t) => t.status === 'DONE').length;
 
                 const wCount =
                     workoutsRes.status === 'fulfilled' && Array.isArray(workoutsRes.value.data)
                         ? workoutsRes.value.data.length
                         : 0;
-                const tWeight =
-                    userRes.status === 'fulfilled' ? userRes.value.data?.targetWeight || 90 : 90;
+
+                const userData = userRes.status === 'fulfilled' ? userRes.value.data : null;
+                const tWeight = userData?.targetWeight || 90;
+                if (userData?.preferredCurrency && CURRENCY_META[userData.preferredCurrency as CurrencyCode]) {
+                    setCurrency(userData.preferredCurrency as CurrencyCode);
+                }
 
                 setSummaryStats({
-                    totalIncomeUAH: income,
-                    totalExpenseUAH: expense,
+                    totalIncomeUAH,
+                    totalExpenseUAH,
                     tasksTotal: tTotal,
                     tasksCompleted: tDone,
                     workoutsCount: wCount,
@@ -122,10 +154,9 @@ export default function AnalyticsPage() {
     };
 
     const financeChartData = (() => {
-        const grouped = rawExpenses.reduce((acc: any, curr: any) => {
+        const grouped = rawExpenses.reduce<Record<string, number>>((acc, curr) => {
             const category = curr.category || 'Інше';
-            if (!acc[category]) acc[category] = 0;
-            acc[category] += Number(curr.amount) || 0;
+            acc[category] = (acc[category] || 0) + (Number(curr.amount) || 0);
             return acc;
         }, {});
 
@@ -160,7 +191,7 @@ export default function AnalyticsPage() {
                             📈 Візуальна Аналітика
                         </h1>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                            Зведена статистика фінансів, тренувань, завдань та ваги
+                            Зведена статистика особистих та сімейних фінансів, тренувань, завдань і ваги
                         </p>
                     </div>
 
@@ -207,7 +238,7 @@ export default function AnalyticsPage() {
                     <div className="bg-white/80 dark:bg-slate-800/80 p-5 rounded-3xl border border-white/60 dark:border-slate-700 shadow-sm">
                         <p className="text-xs font-bold uppercase text-gray-400">Поточна вага</p>
                         <p className="text-2xl font-extrabold text-violet-600 dark:text-violet-400 mt-1">
-                            {latestWeight} кг
+                            {latestWeight} {latestWeight !== '—' ? 'кг' : ''}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             Цільова вага: {summaryStats.targetWeight} кг

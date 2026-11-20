@@ -11,10 +11,9 @@ export enum UserRole {
 
 @Schema({ timestamps: true })
 export class User extends Document {
-    @Prop({ required: true, unique: true })
+    @Prop({ required: true, unique: true, lowercase: true, trim: true })
     email: string;
 
-    // ВИПРАВЛЕННЯ: select: false гарантує, що хеш ніколи не полетить на клієнт
     @Prop({ required: true, select: false })
     passwordHash: string;
 
@@ -44,6 +43,26 @@ export class User extends Document {
 
     @Prop({ default: 70 })
     targetWeight: number;
+
+    @Prop({ default: 'UAH' })
+    preferredCurrency: string;
+
+    @Prop({
+        type: Object,
+        default: {
+            currency: true,
+            quickActions: true,
+            activityFeed: true,
+            homeTech: false,
+        },
+    })
+    widgetsConfig: Record<string, boolean>;
+
+    @Prop({ select: false })
+    resetPasswordToken?: string;
+
+    @Prop({ select: false })
+    resetPasswordExpires?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

@@ -2,21 +2,26 @@ import {
     Injectable,
     NotFoundException,
     BadRequestException,
+    ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Transaction, TransactionType } from './schemas/transaction.schema.js';
 import { User } from '../users/schemas/user.schema.js';
+import { Family } from '../families/schemas/family.schema.js';
 import { CloudinaryService } from '../cloudinary/cloudinary.service.js';
 import { UploadedFileType } from '../common/interfaces/uploaded-file.interface.js';
+import { escapeRegex } from '../common/utils/escape-regex.util.js';
 import { CreateTransactionDto } from './dto/create-transaction.dto.js';
 import { UpdateTransactionDto } from './dto/update-transaction.dto.js';
+import { FinanceQueryDto } from './dto/finance-query.dto.js';
 
 @Injectable()
 export class FinanceService {
     constructor(
         @InjectModel(Transaction.name) private transactionModel: Model<Transaction>,
         @InjectModel(User.name) private userModel: Model<User>,
+        @InjectModel(Family.name) private familyModel: Model<Family>,
         private readonly cloudinaryService: CloudinaryService,
     ) {}
 
@@ -31,13 +36,29 @@ export class FinanceService {
         };
     }
 
+    private async assertCanModify(transaction: Transaction, userId: string): Promise<void> {
+        const isAuthor = String(transaction.userId) === String(userId);
+        if (isAuthor) return;
+
+        if (transaction.isShared && transaction.familyId) {
+            const family = await this.familyModel.findById(transaction.familyId).exec();
+            if (family && String(family.ownerId) === String(userId)) {
+                return;
+            }
+        }
+
+        throw new ForbiddenException(
+            'Редагувати або видаляти спільну транзакцію може лише її автор або власник родини',
+        );
+    }
+
     async create(
         userId: string,
         dto: CreateTransactionDto,
         file?: UploadedFileType,
     ): Promise<Transaction> {
         const user = await this.userModel.findById(userId);
-        let familyId = null;
+        let familyId: Types.ObjectId | null = null;
 
         if (dto.isShared) {
             if (!user?.familyId) {
@@ -63,33 +84,44 @@ export class FinanceService {
             category: dto.category,
             isShared: Boolean(dto.isShared),
             ...(receiptUrl && { receiptUrl }),
-            userId,
+            userId: new Types.ObjectId(userId),
             familyId,
         });
         return newTransaction.save();
     }
 
-    async findAll(
-        userId: string,
-        page = 1,
-        limit = 10,
-        sortBy = 'createdAt',
-        sortOrder: 'asc' | 'desc' = 'desc',
-        type?: string,
-        category?: string,
-        isShared = false,
-    ) {
+    async findAll(userId: string, dto: FinanceQueryDto) {
         const user = await this.userModel.findById(userId);
         const query: Record<string, any> = this.getQueryFilter(
             userId,
             user,
-            isShared,
+            Boolean(dto.isShared),
         );
 
-        if (type && type !== 'all') query.type = type;
-        if (category) query.category = { $regex: category, $options: 'i' };
+        if (dto.type && dto.type !== 'all') query.type = dto.type;
+        if (dto.category) {
+            query.category = { $regex: escapeRegex(dto.category), $options: 'i' };
+        }
+        if (dto.minAmount !== undefined || dto.maxAmount !== undefined) {
+            query.amount = {};
+            if (dto.minAmount !== undefined) query.amount.$gte = dto.minAmount;
+            if (dto.maxAmount !== undefined) query.amount.$lte = dto.maxAmount;
+        }
+        if (dto.dateFrom || dto.dateTo) {
+            query.createdAt = {};
+            if (dto.dateFrom) query.createdAt.$gte = new Date(dto.dateFrom);
+            if (dto.dateTo) {
+                const end = new Date(dto.dateTo);
+                end.setHours(23, 59, 59, 999);
+                query.createdAt.$lte = end;
+            }
+        }
 
+        const page = dto.page ?? 1;
+        const limit = dto.limit ?? 10;
         const skip = (page - 1) * limit;
+        const sortBy = dto.sortBy ?? 'createdAt';
+        const sortOrder = dto.sortOrder ?? 'desc';
         const sortOptions: Record<string, 1 | -1> = {
             [sortBy]: sortOrder === 'asc' ? 1 : -1,
         };
@@ -142,18 +174,13 @@ export class FinanceService {
     }
 
     async remove(id: string, userId: string): Promise<{ deleted: boolean }> {
-        const user = await this.userModel.findById(userId);
-        const query = user?.familyId
-            ? {
-                _id: id,
-                $or: [{ userId }, { familyId: user.familyId, isShared: true }],
-            }
-            : { _id: id, userId };
-
-        const result = await this.transactionModel.deleteOne(query).exec();
-        if (result.deletedCount === 0) {
-            throw new NotFoundException('Транзакцію не знайдено або немає доступу');
+        const transaction = await this.transactionModel.findById(id).exec();
+        if (!transaction) {
+            throw new NotFoundException('Транзакцію не знайдено');
         }
+
+        await this.assertCanModify(transaction, userId);
+        await this.transactionModel.deleteOne({ _id: transaction._id }).exec();
         return { deleted: true };
     }
 
@@ -163,20 +190,14 @@ export class FinanceService {
         dto: UpdateTransactionDto,
         file?: UploadedFileType,
     ) {
-        const user = await this.userModel.findById(userId);
-        const query = user?.familyId
-            ? {
-                _id: id,
-                $or: [{ userId }, { familyId: user.familyId, isShared: true }],
-            }
-            : { _id: id, userId };
+        const transaction = await this.transactionModel.findById(id).exec();
+        if (!transaction) {
+            throw new NotFoundException('Транзакцію не знайдено');
+        }
 
-        const updatePayload: Record<string, any> = {};
-        if (dto.title !== undefined) updatePayload.title = dto.title;
-        if (dto.amount !== undefined) updatePayload.amount = Number(dto.amount);
-        if (dto.type !== undefined) updatePayload.type = dto.type;
-        if (dto.category !== undefined) updatePayload.category = dto.category;
+        await this.assertCanModify(transaction, userId);
 
+        const updatePayload: Record<string, any> = { ...dto };
         if (file) {
             updatePayload.receiptUrl = await this.cloudinaryService.uploadFile(
                 file,
@@ -185,15 +206,15 @@ export class FinanceService {
         }
 
         const updatedTransaction = await this.transactionModel
-            .findOneAndUpdate(
-                query,
+            .findByIdAndUpdate(
+                transaction._id,
                 { $set: updatePayload },
                 { new: true, runValidators: true },
             )
             .exec();
 
         if (!updatedTransaction) {
-            throw new NotFoundException('Транзакцію не знайдено або немає доступу');
+            throw new NotFoundException('Транзакцію не знайдено');
         }
         return updatedTransaction;
     }

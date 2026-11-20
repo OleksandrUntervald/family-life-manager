@@ -15,7 +15,9 @@ import { GetUser } from '../common/decorators/get-user.decorator.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
 import { ParseObjectIdPipe } from '../common/pipes/parse-object-id.pipe.js';
+import { CreatePremiumRequestDto } from './dto/create-premium-request.dto.js';
 import { UpdatePremiumRequestDto } from './dto/update-premium-request.dto.js';
+import { PremiumRequestQueryDto } from './dto/premium-request-query.dto.js';
 
 @Controller('premium-requests')
 export class PremiumRequestsController {
@@ -25,27 +27,25 @@ export class PremiumRequestsController {
     @Post()
     async create(
         @GetUser() user: { id: string },
-        @Body('telegram') telegram: string,
-        @Body('plan') plan?: string,
-        @Body('comment') comment?: string,
+        @Body() dto: CreatePremiumRequestDto,
     ) {
-        return this.requestsService.createRequest(user.id, telegram, plan, comment);
+        return this.requestsService.createRequest(
+            user.id,
+            dto.telegram,
+            dto.plan,
+            dto.comment,
+        );
     }
 
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER)
     @Get()
-    async findAll(
-        @Query('page') page = '1',
-        @Query('limit') limit = '25',
-        @Query('status') status?: string,
-        @Query('search') search?: string,
-    ) {
+    async findAll(@Query() query: PremiumRequestQueryDto) {
         return this.requestsService.findAllPaginated(
-            Number(page) || 1,
-            Number(limit) || 25,
-            status,
-            search,
+            query.page ?? 1,
+            query.limit ?? 25,
+            query.status,
+            query.search,
         );
     }
 

@@ -4,41 +4,33 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
 import { api } from '@/config/api';
+import { User } from '@/types';
 import CurrencyWidget from '@/components/CurrencyWidget';
 import DashboardHeader from '@/components/dashboard/DashboardHeader';
 import ModuleGrid from '@/components/dashboard/ModuleGrid';
 import RecentActivityFeed from '@/components/dashboard/RecentActivityFeed';
 
-interface UserProfile {
-  _id?: string;
-  id?: string;
-  name: string;
-  email: string;
-  role: string;
-}
-
 export default function HomePage() {
   const router = useRouter();
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await api.get('/api/users/me');
+        const response = await api.get<User>('/api/users/me');
         setUser(response.data);
       } catch (error) {
-        router.push('/login');
+        console.error('Не вдалося завантажити профіль:', error);
       } finally {
         setLoading(false);
       }
     };
     fetchProfile();
-  }, [router]);
+  }, []);
 
   const handleLogout = () => {
     Cookies.remove('access_token');
-    localStorage.removeItem('token');
     router.push('/login');
   };
 

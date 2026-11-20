@@ -4,11 +4,18 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service.js';
 
+interface JwtPayload {
+    sub: string;
+    email: string;
+    role: string;
+    tokenVersion?: number;
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
     constructor(
         private configService: ConfigService,
-        private usersService: UsersService
+        private usersService: UsersService,
     ) {
         super({
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -17,8 +24,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         });
     }
 
-    async validate(payload: any) {
-        const user = await this.usersService.findById(payload.sub);
+    async validate(payload: JwtPayload) {
+        let user;
+        try {
+            user = await this.usersService.findById(payload.sub);
+        } catch {
+            throw new UnauthorizedException('Користувача не знайдено або сесія недійсна');
+        }
 
         if (!user) {
             throw new UnauthorizedException('Користувача не знайдено');
@@ -28,12 +40,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             throw new UnauthorizedException('Ваш акаунт заблоковано адміністратором');
         }
 
-        // ВИПРАВЛЕНО: Якщо в базі старий запис без tokenVersion, вважаємо його нулем
         const currentVersion = user.tokenVersion || 0;
-        if (currentVersion !== payload.tokenVersion) {
+        if (currentVersion !== (payload.tokenVersion || 0)) {
             throw new UnauthorizedException('Сесія застаріла. Будь ласка, увійдіть знову.');
         }
 
-        return { id: user._id, email: user.email, role: user.role };
+        return {
+            id: user._id.toString(),
+            email: user.email,
+            role: user.role,
+        };
     }
 }

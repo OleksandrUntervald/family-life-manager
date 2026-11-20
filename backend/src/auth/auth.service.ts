@@ -31,9 +31,7 @@ export class AuthService {
     }
 
     async login(dto: LoginDto) {
-        const user = await this.usersService.findByEmail(
-            dto.email.trim().toLowerCase(),
-        );
+        const user = await this.usersService.findByEmail(dto.email);
         if (!user) {
             throw new UnauthorizedException('Невірний email або пароль');
         }
@@ -60,13 +58,16 @@ export class AuthService {
         );
     }
 
-    async resetPassword(email: string, newPassword: string) {
-        if (!email || !newPassword || newPassword.length < 6) {
-            throw new BadRequestException(
-                'Вкажіть коректний email та новий пароль (мінімум 6 символів)',
-            );
-        }
-        return this.usersService.resetPasswordByEmail(email, newPassword);
+    async forgotPassword(email: string) {
+        await this.usersService.createPasswordResetToken(email);
+        return {
+            message:
+                'Якщо цей email зареєстровано, інструкції для скидання пароля надіслано.',
+        };
+    }
+
+    async resetPassword(token: string, newPassword: string) {
+        return this.usersService.resetPasswordWithToken(token, newPassword);
     }
 
     private generateToken(
