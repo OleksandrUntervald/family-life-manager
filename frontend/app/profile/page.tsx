@@ -5,7 +5,22 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Cookies from 'js-cookie';
 import { api } from '@/config/api';
+import { CURRENCY_META, CurrencyCode } from '@/components/CurrencyWidget';
 import FamilySection from '@/components/profile/FamilySection';
+
+const DEFAULT_WIDGETS: Record<string, boolean> = {
+    currency: true,
+    quickActions: true,
+    activityFeed: true,
+    homeTech: false,
+};
+
+const WIDGET_LABELS: { key: string; label: string; desc: string }[] = [
+    { key: 'currency', label: '💱 Віджет курсів валют', desc: 'Курси НБУ та криптовалют на головній' },
+    { key: 'quickActions', label: '⚡ Швидкі дії', desc: 'Кнопки швидкого додавання без переходу' },
+    { key: 'activityFeed', label: '🕒 Стрічка останніх дій', desc: 'Останні особисті та сімейні записи' },
+    { key: 'homeTech', label: '🔌 Картка «Техніка та Дім»', desc: 'Додатковий модуль обліку техніки на дашборді' },
+];
 
 export default function ProfilePage() {
     const router = useRouter();
@@ -13,6 +28,10 @@ export default function ProfilePage() {
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const [profile, setProfile] = useState({ name: '', email: '', role: 'user' });
+    const [preferredCurrency, setPreferredCurrency] = useState<CurrencyCode>('UAH');
+    const [widgetsConfig, setWidgetsConfig] = useState<Record<string, boolean>>(DEFAULT_WIDGETS);
+    const [savingPrefs, setSavingPrefs] = useState(false);
+
     const [passwords, setPasswords] = useState({
         oldPassword: '',
         newPassword: '',
@@ -37,8 +56,16 @@ export default function ProfilePage() {
                 email: userRes.data.email || '',
                 role: userRes.data.role || 'user',
             });
+
+            if (userRes.data.preferredCurrency && CURRENCY_META[userRes.data.preferredCurrency as CurrencyCode]) {
+                setPreferredCurrency(userRes.data.preferredCurrency as CurrencyCode);
+            }
+            if (userRes.data.widgetsConfig) {
+                setWidgetsConfig({ ...DEFAULT_WIDGETS, ...userRes.data.widgetsConfig });
+            }
+
             setFamily(familyRes.data);
-        } catch (error) {
+        } catch {
             showMessage('error', 'Не вдалося завантажити дані профілю');
         } finally {
             setLoading(false);
@@ -52,6 +79,23 @@ export default function ProfilePage() {
     const showMessage = (type: 'success' | 'error', text: string) => {
         setMessage({ type, text });
         setTimeout(() => setMessage(null), 5000);
+    };
+
+    const handleSavePreferences = async () => {
+        try {
+            setSavingPrefs(true);
+            await api.patch('/api/users/settings', {
+                preferredCurrency,
+                widgetsConfig,
+            });
+            localStorage.setItem('preferredCurrency', preferredCurrency);
+            showMessage('success', 'Валюту та налаштування віджетів збережено! ✅');
+        } catch (error: any) {
+            const msg = error.response?.data?.message;
+            showMessage('error', Array.isArray(msg) ? msg[0] : msg || 'Не вдалося зберегти налаштування ❌');
+        } finally {
+            setSavingPrefs(false);
+        }
     };
 
     const handleProfileSubmit = async (e: React.FormEvent) => {
@@ -145,7 +189,7 @@ export default function ProfilePage() {
             showMessage('success', 'Ви покинули родину.');
             setFamily(null);
             fetchData();
-        } catch (error: any) {
+        } catch {
             showMessage('error', 'Помилка при виході з родини ❌');
         }
     };
@@ -159,7 +203,6 @@ export default function ProfilePage() {
 
     const handleLogout = () => {
         Cookies.remove('access_token');
-        localStorage.removeItem('token');
         router.push('/login');
     };
 
@@ -181,11 +224,11 @@ export default function ProfilePage() {
                                 👤 Налаштування профілю
                             </h1>
                             <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 text-xs font-extrabold rounded-full uppercase">
-                {profile.role}
-              </span>
+                                {profile.role}
+                            </span>
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                            Керування обліковим записом, безпекою та родиною
+                            Керування обліковим записом, безпекою, віджетами та родиною
                         </p>
                     </div>
                     <Link
@@ -219,6 +262,62 @@ export default function ProfilePage() {
                     onLeaveFamily={handleLeaveFamily}
                     onCopyInviteCode={copyInviteCode}
                 />
+
+                {/* Валюта та налаштування віджетів дашборду */}
+                <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-3xl shadow-sm border border-white/60 dark:border-slate-700 space-y-5">
+                    <div className="flex flex-wrap justify-between items-center gap-4">
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">
+                                🎛️ Валюта та віджети дашборду
+                            </h2>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                Зберігаються у вашому профілі та синхронізуються між пристроями
+                            </p>
+                        </div>
+                        <select
+                            value={preferredCurrency}
+                            onChange={(e) => setPreferredCurrency(e.target.value as CurrencyCode)}
+                            className="p-2.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl text-sm font-bold outline-none cursor-pointer"
+                        >
+                            {(Object.keys(CURRENCY_META) as CurrencyCode[]).map((code) => (
+                                <option key={code} value={code}>
+                                    {CURRENCY_META[code].flag} {code} ({CURRENCY_META[code].symbol}) — {CURRENCY_META[code].label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {WIDGET_LABELS.map((w) => (
+                            <label
+                                key={w.key}
+                                className="flex items-center justify-between gap-3 p-3.5 bg-gray-50 dark:bg-slate-900/60 rounded-2xl border border-gray-100 dark:border-slate-700 cursor-pointer"
+                            >
+                                <div>
+                                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{w.label}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">{w.desc}</p>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean(widgetsConfig[w.key])}
+                                    onChange={(e) =>
+                                        setWidgetsConfig((prev) => ({ ...prev, [w.key]: e.target.checked }))
+                                    }
+                                    className="w-5 h-5 accent-indigo-600 cursor-pointer"
+                                />
+                            </label>
+                        ))}
+                    </div>
+
+                    <button
+                        type="button"
+                        disabled={savingPrefs}
+                        onClick={handleSavePreferences}
+                        className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-sm text-sm transition-all cursor-pointer disabled:opacity-60"
+                    >
+                        {savingPrefs ? 'Збереження...' : 'Зберегти налаштування'}
+                    </button>
+                </div>
 
                 {/* Секція активації ліцензійного ключа Premium */}
                 <div className="bg-amber-50/80 dark:bg-amber-900/20 p-6 rounded-3xl border border-amber-200 dark:border-amber-800/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

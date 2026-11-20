@@ -7,9 +7,18 @@ import { DailyStats } from '@/types';
 import BodySettingsForm from '@/components/health/BodySettingsForm';
 import HealthMetricsCards from '@/components/health/HealthMetricsCards';
 
+interface WeightHistoryItem {
+    _id: string;
+    date: string;
+    weight: number;
+    steps?: number;
+    water?: number;
+}
+
 export default function HealthPage() {
     const [selectedDate, setSelectedDate] = useState('');
     const [data, setData] = useState<DailyStats | null>(null);
+    const [weightHistory, setWeightHistory] = useState<WeightHistoryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -38,18 +47,27 @@ export default function HealthPage() {
         try {
             setLoading(true);
             setErrorMsg(null);
-            const res = await api.get(`/api/health/stats/${date}`);
-            setData(res.data);
+            const [statsRes, historyRes] = await Promise.all([
+                api.get(`/api/health/stats/${date}`),
+                api.get<WeightHistoryItem[]>('/api/health'),
+            ]);
+
+            setData(statsRes.data);
             setFormData({
-                consumedCalories: res.data.record?.consumedCalories
-                    ? String(res.data.record.consumedCalories)
+                consumedCalories: statsRes.data.record?.consumedCalories
+                    ? String(statsRes.data.record.consumedCalories)
                     : '',
-                steps: res.data.record?.steps ? String(res.data.record.steps) : '',
-                weight: res.data.record?.weight ? String(res.data.record.weight) : '',
-                water: res.data.record?.water ? String(res.data.record.water) : '',
+                steps: statsRes.data.record?.steps ? String(statsRes.data.record.steps) : '',
+                weight: statsRes.data.record?.weight ? String(statsRes.data.record.weight) : '',
+                water: statsRes.data.record?.water ? String(statsRes.data.record.water) : '',
             });
-            if (res.data.userParams) {
-                setUserParams(res.data.userParams);
+            if (statsRes.data.userParams) {
+                setUserParams(statsRes.data.userParams);
+            }
+
+            if (Array.isArray(historyRes.data)) {
+                const onlyWithWeight = historyRes.data.filter((item) => Number(item.weight) > 0);
+                setWeightHistory(onlyWithWeight);
             }
         } catch (error: any) {
             setErrorMsg(error.response?.data?.message || 'Не вдалося завантажити статистику');
@@ -197,7 +215,9 @@ export default function HealthPage() {
                     </div>
                     <div className="text-right">
                         <p className="text-xs text-gray-400">Базовий метаболізм (BMR)</p>
-                        <p className="text-lg font-bold text-teal-700">{data?.stats?.bmr || 0} ккал / день</p>
+                        <p className="text-lg font-bold text-teal-700">
+                            {data?.stats?.currentWeight ? `${data.stats.bmr} ккал / день` : 'Вкажіть вагу'}
+                        </p>
                     </div>
                 </div>
 
@@ -242,7 +262,7 @@ export default function HealthPage() {
                                 type="number"
                                 min="0"
                                 step="0.1"
-                                placeholder="Залишити поточну"
+                                placeholder="Напр. 92.5"
                                 className="w-full p-3.5 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500 text-gray-800"
                                 value={formData.weight}
                                 onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
@@ -257,6 +277,57 @@ export default function HealthPage() {
                             </button>
                         </div>
                     </form>
+                </div>
+
+                {/* Історія ваги */}
+                <div className="bg-white/80 backdrop-blur-md p-6 rounded-3xl shadow-sm border border-white/60">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-bold text-gray-800">⚖️ Історія ваги</h3>
+                        <span className="text-xs font-medium text-gray-400">
+                            Ціль: {userParams.targetWeight} кг
+                        </span>
+                    </div>
+
+                    {weightHistory.length === 0 ? (
+                        <p className="text-sm text-gray-400">
+                            Записів ваги ще немає. Введіть свою вагу у формі вище, щоб почати відстеження.
+                        </p>
+                    ) : (
+                        <div className="divide-y divide-gray-100">
+                            {weightHistory.slice(0, 15).map((item, idx) => {
+                                const prev = weightHistory[idx + 1];
+                                const diff = prev ? +(item.weight - prev.weight).toFixed(1) : null;
+                                return (
+                                    <button
+                                        key={item._id}
+                                        type="button"
+                                        onClick={() => setSelectedDate(item.date)}
+                                        className={`w-full py-3 px-2 flex items-center justify-between text-left hover:bg-teal-50/50 rounded-xl transition-colors cursor-pointer ${
+                                            item.date === selectedDate ? 'bg-teal-50/80' : ''
+                                        }`}
+                                    >
+                                        <span className="text-sm font-semibold text-gray-700">{item.date}</span>
+                                        <div className="flex items-center gap-3">
+                                            {diff !== null && diff !== 0 && (
+                                                <span
+                                                    className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                                                        diff < 0
+                                                            ? 'bg-emerald-100 text-emerald-700'
+                                                            : 'bg-rose-100 text-rose-700'
+                                                    }`}
+                                                >
+                                                    {diff > 0 ? `+${diff}` : diff} кг
+                                                </span>
+                                            )}
+                                            <span className="text-base font-extrabold text-teal-700">
+                                                {item.weight} кг
+                                            </span>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

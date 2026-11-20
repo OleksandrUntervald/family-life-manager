@@ -10,15 +10,21 @@ import DashboardHeader from '@/components/dashboard/DashboardHeader';
 import ModuleGrid from '@/components/dashboard/ModuleGrid';
 import RecentActivityFeed from '@/components/dashboard/RecentActivityFeed';
 
+interface ExtendedUser extends User {
+  preferredCurrency?: string;
+  widgetsConfig?: Record<string, boolean>;
+}
+
 export default function HomePage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<ExtendedUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [feedRefreshKey, setFeedRefreshKey] = useState(0);
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await api.get<User>('/api/users/me');
+        const response = await api.get<ExtendedUser>('/api/users/me');
         setUser(response.data);
       } catch (error) {
         console.error('Не вдалося завантажити профіль:', error);
@@ -44,13 +50,20 @@ export default function HomePage() {
     );
   }
 
+  const widgets = user?.widgetsConfig;
+
   return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-blue-50/50 to-purple-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-6 md:p-10 font-sans text-gray-800 dark:text-gray-100 transition-colors duration-300">
         <div className="max-w-5xl mx-auto">
           <DashboardHeader user={user} onLogout={handleLogout} />
-          <CurrencyWidget />
-          <ModuleGrid />
-          <RecentActivityFeed />
+          {widgets?.currency !== false && <CurrencyWidget />}
+          <ModuleGrid
+              widgetsConfig={widgets}
+              onQuickActionSuccess={() => setFeedRefreshKey((k) => k + 1)}
+          />
+          {widgets?.activityFeed !== false && (
+              <RecentActivityFeed key={feedRefreshKey} />
+          )}
         </div>
       </div>
   );

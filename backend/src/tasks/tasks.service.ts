@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Task } from './schemas/task.schema.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
 import { UpdateTaskDto } from './dto/update-task.dto.js';
@@ -13,9 +13,13 @@ export class TasksService {
         @InjectModel(User.name) private userModel: Model<User>,
     ) {}
 
+    private getUserIdFilter(userId: string) {
+        return { $in: [userId, new Types.ObjectId(userId)] };
+    }
+
     async create(userId: string, dto: CreateTaskDto): Promise<Task> {
         const user = await this.userModel.findById(userId);
-        let familyId = null;
+        let familyId: Types.ObjectId | null = null;
 
         if (dto.isShared) {
             if (!user?.familyId) {
@@ -30,7 +34,7 @@ export class TasksService {
             ...(dto.notes !== undefined && { notes: dto.notes }),
             ...(dto.assignedTo !== undefined && { assignedTo: dto.assignedTo }),
             ...(dto.status && { status: dto.status }),
-            userId,
+            userId: new Types.ObjectId(userId),
             familyId,
             isShared: Boolean(dto.isShared),
         });
@@ -45,18 +49,19 @@ export class TasksService {
             if (!user?.familyId) return [];
             query = { familyId: user.familyId, isShared: true };
         } else {
-            query = { userId, isShared: { $ne: true } };
+            query = { userId: this.getUserIdFilter(userId), isShared: { $ne: true } };
         }
 
-        return this.taskModel.find(query).sort({ date: 1, status: 1, createdAt: -1 }).exec();
+        return this.taskModel.find(query).sort({ createdAt: -1, date: -1 }).exec();
     }
 
     async remove(id: string, userId: string): Promise<{ deleted: boolean }> {
         const user = await this.userModel.findById(userId);
+        const userFilter = this.getUserIdFilter(userId);
 
         const query = user?.familyId
-            ? { _id: id, $or: [{ userId }, { familyId: user.familyId, isShared: true }] }
-            : { _id: id, userId };
+            ? { _id: id, $or: [{ userId: userFilter }, { familyId: user.familyId, isShared: true }] }
+            : { _id: id, userId: userFilter };
 
         const result = await this.taskModel.deleteOne(query).exec();
         if (result.deletedCount === 0) {
@@ -67,22 +72,16 @@ export class TasksService {
 
     async updateTask(userId: string, id: string, dto: UpdateTaskDto): Promise<Task> {
         const user = await this.userModel.findById(userId);
-
-        const safeUpdate: Record<string, any> = {};
-        if (dto.title !== undefined) safeUpdate.title = dto.title;
-        if (dto.date !== undefined) safeUpdate.date = dto.date;
-        if (dto.notes !== undefined) safeUpdate.notes = dto.notes;
-        if (dto.assignedTo !== undefined) safeUpdate.assignedTo = dto.assignedTo;
-        if (dto.status !== undefined) safeUpdate.status = dto.status;
+        const userFilter = this.getUserIdFilter(userId);
 
         const query = user?.familyId
-            ? { _id: id, $or: [{ userId }, { familyId: user.familyId, isShared: true }] }
-            : { _id: id, userId };
+            ? { _id: id, $or: [{ userId: userFilter }, { familyId: user.familyId, isShared: true }] }
+            : { _id: id, userId: userFilter };
 
         const updatedTask = await this.taskModel
             .findOneAndUpdate(
                 query,
-                { $set: safeUpdate },
+                { $set: dto },
                 { new: true, runValidators: true },
             )
             .exec();

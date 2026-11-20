@@ -9,9 +9,7 @@ export const api = axios.create({
 
 api.interceptors.request.use(
     (config) => {
-        const token =
-            Cookies.get('access_token') ||
-            (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
+        const token = Cookies.get('access_token');
 
         if (token && config.headers) {
             config.headers.Authorization = `Bearer ${token}`;
@@ -26,7 +24,6 @@ api.interceptors.response.use(
     (error) => {
         if (error.response?.status === 401 && typeof window !== 'undefined') {
             Cookies.remove('access_token');
-            localStorage.removeItem('token');
             if (
                 !window.location.pathname.startsWith('/login') &&
                 !window.location.pathname.startsWith('/register')

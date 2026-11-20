@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
+import { IsNumber, IsObject, IsOptional, IsString, Min, Max } from 'class-validator';
 
 export class UpdateSettingsDto {
     @IsOptional()
@@ -20,4 +20,12 @@ export class UpdateSettingsDto {
     @IsNumber({}, { message: 'Вага має бути числом' })
     @Min(20, { message: 'Неможлива вага' })
     targetWeight?: number;
+
+    @IsOptional()
+    @IsString()
+    preferredCurrency?: string;
+
+    @IsOptional()
+    @IsObject()
+    widgetsConfig?: Record<string, boolean>;
 }
